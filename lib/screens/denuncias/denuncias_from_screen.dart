@@ -17,6 +17,8 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
   final formKey = GlobalKey<FormState>();
 
+  int currentIndex = 1;
+
   // Controllers
   final descripcionController = TextEditingController();
   final referenciaController = TextEditingController();
@@ -153,19 +155,107 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  // ✅ Menú del perfil (arriba derecha)
+  void _onProfileMenu(String value) {
+    switch (value) {
+      case 'perfil':
+        _snack("Ir a Perfil (solo frontend)");
+        break;
+      case 'cerrar':
+        _snack("Cerrar sesión (solo frontend)");
+        break;
+    }
+  }
+
+  // ✅ Navegación inferior
+  void _onBottomNavTap(int index) {
+    setState(() => currentIndex = index);
+
+    // Aquí conectas tus rutas reales:
+    // if (index == 0) Navigator.pushNamed(context, '/denuncias');
+    // if (index == 1) Navigator.pushNamed(context, '/form/denuncias'); // estás aquí
+    // if (index == 2) Navigator.pushNamed(context, '/historial');
+    // if (index == 3) Navigator.pushNamed(context, '/cartera');
+  }
+
   @override
   Widget build(BuildContext context) {
     final pos = currentPosition;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Denuncias',
-          style: TextStyle(color: Color.fromARGB(255, 44, 100, 196)),
+      // Drawer (menú lateral)
+      drawer: Drawer(
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              const ListTile(
+                leading: CircleAvatar(child: Icon(Icons.person)),
+                title: Text("Ciudadano"),
+                subtitle: Text("usuario@correo.com"),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.report),
+                title: const Text("Mis Denuncias"),
+                onTap: () {
+                  Navigator.pop(context);
+                  // Navigator.pushNamed(context, '/denuncias');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: const Text("Perfil"),
+                onTap: () {
+                  Navigator.pop(context);
+                },
+              ),
+              const Spacer(),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text("Cerrar sesión"),
+                onTap: () {
+                  Navigator.pop(context);
+                },
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
         ),
-        centerTitle: true,
       ),
 
+      // AppBar superior
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: primaryBlue),
+        title: const Text(
+          "Denuncias",
+          style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
+        ),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: _onProfileMenu,
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'perfil', child: Text("Ver perfil")),
+              PopupMenuItem(value: 'cerrar', child: Text("Cerrar sesión")),
+            ],
+            child: Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: Colors.grey.shade300,
+                child: const Icon(
+                  Icons.person,
+                  color: Colors.black54,
+                  size: 18,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Form(
@@ -391,6 +481,28 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         shape: const CircleBorder(),
         onPressed: _abrirChatbot,
         child: const Icon(Icons.smart_toy, color: Colors.white),
+      ),
+
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: currentIndex,
+        onTap: _onBottomNavTap,
+        type: BottomNavigationBarType.fixed,
+        showSelectedLabels: false,
+        showUnselectedLabels: false,
+        selectedItemColor: primaryBlue,
+        unselectedItemColor: Colors.grey.shade600,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Inicio"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.search),
+            label: "Buscar",
+          ), // ✅ este queda activo
+          BottomNavigationBarItem(icon: Icon(Icons.swap_horiz), label: "Mov"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.account_balance_wallet),
+            label: "Wallet",
+          ),
+        ],
       ),
     );
   }
