@@ -35,6 +35,17 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   supabase_flutter: ^2.10.3
+   # Mapa (Google Maps)
+  google_maps_flutter: ^2.6.1
+
+  # Ubicación en tiempo real
+  geolocator: ^12.0.0
+
+  # Seleccionar foto o video
+  image_picker: ^1.1.2
+
+  # Firma (dibujar con el dedo)
+  signature: ^5.5.0
 
 
 dev_dependencies:
