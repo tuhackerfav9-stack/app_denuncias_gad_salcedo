@@ -67,7 +67,9 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
   Future<void> _initUbicacion() async {
     final ok = await _permisosUbicacion();
-    if (!ok) return;
+    if (!ok) {
+      return;
+    }
 
     final pos = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
@@ -155,7 +157,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  // ✅ Menú del perfil (arriba derecha)
+  //  Menú del perfil (arriba derecha)
   void _onProfileMenu(String value) {
     switch (value) {
       case 'perfil':
@@ -167,7 +169,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     }
   }
 
-  // ✅ Navegación inferior
+  //  Navegación inferior
   void _onBottomNavTap(int index) {
     setState(() => currentIndex = index);
 
@@ -291,10 +293,14 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
               TextFormField(
                 controller: descripcionController,
                 validator: (v) {
-                  if (v == null || v.trim().isEmpty)
+                  if (v == null || v.trim().isEmpty) {
                     return 'La descripción es requerida';
-                  if (v.trim().length < 10)
+                  }
+
+                  if (v.trim().length < 10) {
                     return 'Describe un poco más (mín. 10 caracteres)';
+                  }
+
                   return null;
                 },
                 decoration: InputDecoration(
@@ -475,7 +481,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         ),
       ),
 
-      // FAB Robot 🤖 para chatbot
+      // FAB Robot  para chatbot
       floatingActionButton: FloatingActionButton(
         backgroundColor: primaryBlue,
         shape: const CircleBorder(),
@@ -496,7 +502,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.search),
             label: "Buscar",
-          ), // ✅ este queda activo
+          ), // este queda activo
           BottomNavigationBarItem(icon: Icon(Icons.swap_horiz), label: "Mov"),
           BottomNavigationBarItem(
             icon: Icon(Icons.account_balance_wallet),

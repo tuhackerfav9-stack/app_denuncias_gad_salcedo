@@ -3,8 +3,15 @@ import 'package:flutter/material.dart';
 import 'screens/autch/login.dart';
 import 'screens/autch/register.dart';
 import 'screens/autch/register2.dart';
+import 'screens/autch/register3.dart';
+import 'screens/autch/register4.dart';
+import 'screens/autch/register5.dart';
+import 'screens/ayuda/ayuda_screen.dart';
+import 'screens/chatbot/chatbot_screen.dart';
 import 'screens/denuncias/denuncias_from_screen.dart';
 import 'screens/denuncias/denuncias_screen.dart';
+import 'screens/denuncias/mapa_denuncias_screen.dart';
+import 'screens/perfil/ciudadano_perfil_screen.dart';
 
 void main() => runApp(const MyApp());
 
@@ -15,13 +22,20 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Denuncias Gad Salcedo',
-      initialRoute: '/form/denuncias',
+      initialRoute: '/register5',
       routes: {
         '/': (context) => const Login(),
         '/register': (context) => const Register(),
         '/register2': (context) => const Register2(),
+        '/register3': (context) => const Register3(),
+        '/register4': (context) => const Register4(),
+        '/register5': (context) => const Register5(),
         '/denuncias': (context) => const DenunciasScreen(),
         '/form/denuncias': (context) => const DenunciasFormScreen(),
+        '/chatbot': (context) => const ChatbotScreen(),
+        '/mapadenuncias': (context) => const MapaDenunciasScreen(),
+        '/perfil': (context) => const CiudadanoPerfilScreen(),
+        '/ayuda': (context) => const AyudaScreen(),
       },
     );
   }
