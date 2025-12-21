@@ -111,22 +111,29 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
               ),
               const Divider(),
               ListTile(
-                leading: const Icon(Icons.map),
-                title: const Text("Mapa denuncias"),
-                onTap: () => Navigator.pop(context),
-              ),
-              ListTile(
-                leading: const Icon(Icons.report),
-                title: const Text("Mis denuncias"),
+                leading: const Icon(Icons.person_outline),
+                title: const Text("Perfil"),
                 onTap: () {
                   Navigator.pop(context);
+                  Navigator.pushNamed(context, '/perfil');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: const Text("Ayuda"),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/ayuda');
                 },
               ),
               const Spacer(),
               ListTile(
                 leading: const Icon(Icons.logout),
                 title: const Text("Cerrar sesión"),
-                onTap: () => Navigator.pop(context),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushReplacementNamed(context, '/');
+                },
               ),
               const SizedBox(height: 10),
             ],
@@ -351,7 +358,9 @@ class _FilterChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            color: selected ? primaryBlue.withOpacity(0.10) : Colors.white,
+            color: selected
+                ? primaryBlue.withAlpha(26) // 26 ≈ 10%
+                : Colors.white,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: selected ? primaryBlue : Colors.grey.shade300,
@@ -420,7 +429,7 @@ class _DenunciaLabel extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.10),
+                color: Colors.black.withValues(alpha: 0.10),
                 blurRadius: 10,
                 offset: const Offset(0, 6),
               ),

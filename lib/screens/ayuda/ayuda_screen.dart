@@ -12,55 +12,129 @@ class _AyudaScreenState extends State<AyudaScreen> {
 
   final TextEditingController searchController = TextEditingController();
 
-  // chips (como tu mock)
+  // filtro por categoría (chips)
   String chipSeleccionado = 'todos';
+
+  // navegación inferior
+  int currentIndex = 0;
 
   // datos dummy (solo frontend)
   final List<_HelpItem> items = const [
     _HelpItem(
-      pregunta: 'porque subir mi cedula ?',
+      pregunta: '¿Por qué debo subir mi cédula?',
       respuesta:
           'Se solicita la cédula para identificar al ciudadano y evitar denuncias falsas. '
-          'Tus datos se usan únicamente para gestión de la denuncia y seguimiento.',
+          'Tus datos se usan únicamente para gestionar la denuncia y dar seguimiento.',
       categoria: 'registro',
     ),
     _HelpItem(
-      pregunta: 'que hace el chat bot ?',
+      pregunta: '¿Qué hace el chatbot?',
       respuesta:
           'El chatbot te guía para redactar correctamente tu denuncia: te pregunta el tipo, descripción, '
           'ubicación y evidencia. Luego te ayuda a enviarla.',
       categoria: 'chatbot',
     ),
     _HelpItem(
-      pregunta: 'como ayuda el chat bot ?',
+      pregunta: '¿Cómo ayuda el chatbot a redactar una denuncia?',
       respuesta:
           'Te hace preguntas paso a paso, te sugiere qué información incluir y te ayuda a adjuntar evidencias '
-          '(foto, video, audio o documentos) para que tu denuncia sea más clara.',
+          '(foto, video o documentos) para que tu denuncia sea más clara.',
       categoria: 'chatbot',
     ),
     _HelpItem(
-      pregunta: 'que es una denuncia ?',
+      pregunta: '¿Qué es una denuncia?',
       respuesta:
           'Una denuncia es un reporte formal de un problema o incidente (basura, vías, alumbrado, etc.) '
           'para que el municipio pueda revisarlo y gestionarlo.',
       categoria: 'general',
     ),
     _HelpItem(
-      pregunta: 'como denunciar ?',
+      pregunta: '¿Cómo denunciar desde la app?',
       respuesta:
-          '1) Elige tipo de denuncia\n'
+          '1) Elige el tipo de denuncia\n'
           '2) Describe el problema\n'
-          '3) Selecciona ubicación en el mapa\n'
+          '3) Selecciona la ubicación en el mapa\n'
           '4) Adjunta evidencia\n'
           '5) Firma y envía',
       categoria: 'como denunciar',
     ),
     _HelpItem(
-      pregunta: 'hay cosas que no puedo denunciar ?',
+      pregunta: '¿Hay cosas que no puedo denunciar?',
       respuesta:
-          'Sí. No se aceptan denuncias falsas, amenazas, contenido ofensivo o fuera de competencia municipal. '
+          'Sí. No se aceptan denuncias falsas, amenazas, contenido ofensivo o temas fuera de competencia municipal. '
           'Para emergencias, contacta a los servicios correspondientes.',
       categoria: 'restricciones',
+    ),
+
+    // ===== 10+ preguntas nuevas =====
+    _HelpItem(
+      pregunta: '¿Cómo sé si mi denuncia fue recibida?',
+      respuesta:
+          'Al enviar la denuncia, verás un mensaje de confirmación. Luego podrás verla en “Mis denuncias” '
+          'con su estado (pendiente/en revisión/atendida).',
+      categoria: 'general',
+    ),
+    _HelpItem(
+      pregunta: '¿Puedo denunciar de forma anónima?',
+      respuesta:
+          'Por seguridad del sistema, el registro ayuda a evitar denuncias falsas. '
+          'Tu información se usa para seguimiento y validación.',
+      categoria: 'registro',
+    ),
+    _HelpItem(
+      pregunta: '¿Qué pasa si me equivoco al escribir la denuncia?',
+      respuesta:
+          'Puedes crear una nueva denuncia con la información correcta. Si el sistema permite edición, '
+          'podrás corregir antes de que sea atendida.',
+      categoria: 'otros',
+    ),
+    _HelpItem(
+      pregunta: '¿Qué tipo de evidencia puedo subir?',
+      respuesta:
+          'Puedes subir foto, video o documentos. Mientras más clara sea la evidencia, más fácil será validar el caso.',
+      categoria: 'otros',
+    ),
+    _HelpItem(
+      pregunta: '¿Por qué debo firmar la denuncia?',
+      respuesta:
+          'La firma sirve como confirmación del ciudadano de que la información enviada es real y válida.',
+      categoria: 'registro',
+    ),
+    _HelpItem(
+      pregunta: '¿Qué hago si el mapa no carga?',
+      respuesta:
+          'Revisa tu conexión a internet y habilita permisos de ubicación. Si continúa, reinicia la app.',
+      categoria: 'otros',
+    ),
+    _HelpItem(
+      pregunta: '¿Qué hago si el GPS no detecta mi ubicación?',
+      respuesta:
+          'Asegúrate de tener el GPS activado, permisos de ubicación concedidos y precisión alta en el teléfono.',
+      categoria: 'otros',
+    ),
+    _HelpItem(
+      pregunta: '¿Puedo denunciar el mismo problema varias veces?',
+      respuesta:
+          'La app busca evitar duplicados. Si ya existe una denuncia similar, revisa el mapa y el historial antes de enviar otra.',
+      categoria: 'restricciones',
+    ),
+    _HelpItem(
+      pregunta: '¿Cuánto tiempo tarda en atenderse una denuncia?',
+      respuesta:
+          'Depende del tipo de denuncia y disponibilidad. Puedes revisar el estado en “Mis denuncias”.',
+      categoria: 'general',
+    ),
+    _HelpItem(
+      pregunta: '¿Cómo cambio mi contraseña?',
+      respuesta:
+          'Desde tu perfil podrás cambiar tu contraseña. También puedes usar “Recuperar contraseña” desde el login.',
+      categoria: 'registro',
+    ),
+    _HelpItem(
+      pregunta: '¿El chatbot puede enviar la denuncia por mí?',
+      respuesta:
+          'El chatbot puede ayudarte a redactar y completar datos. Al final, tú confirmas el envío.',
+      categoria: 'chatbot',
     ),
   ];
 
@@ -70,13 +144,15 @@ class _AyudaScreenState extends State<AyudaScreen> {
     super.dispose();
   }
 
+  // ====== filtrado ======
   List<_HelpItem> get _filtrados {
     final q = searchController.text.trim().toLowerCase();
 
     return items.where((it) {
+      final cat = it.categoria.toLowerCase();
       final matchChip = (chipSeleccionado == 'todos')
           ? true
-          : it.categoria.toLowerCase() == chipSeleccionado;
+          : cat == chipSeleccionado;
       final matchSearch = q.isEmpty
           ? true
           : (it.pregunta.toLowerCase().contains(q) ||
@@ -85,10 +161,11 @@ class _AyudaScreenState extends State<AyudaScreen> {
     }).toList();
   }
 
+  // ====== modal detalle ======
   void _showDetalle(_HelpItem item) {
     showDialog(
       context: context,
-      barrierDismissible: true, // puede cerrar tocando fuera
+      barrierDismissible: true,
       builder: (_) {
         return Dialog(
           insetPadding: const EdgeInsets.symmetric(
@@ -123,8 +200,6 @@ class _AyudaScreenState extends State<AyudaScreen> {
                   ],
                 ),
               ),
-
-              // ✅ Botón X flotante
               Positioned(
                 right: 6,
                 top: 6,
@@ -140,6 +215,16 @@ class _AyudaScreenState extends State<AyudaScreen> {
     );
   }
 
+  // ====== bottom nav ======
+  void _onBottomNavTap(int index) {
+    setState(() => currentIndex = index);
+
+    if (index == 0) Navigator.pushNamed(context, '/denuncias');
+    if (index == 1) Navigator.pushNamed(context, '/form/denuncias');
+    if (index == 2) Navigator.pushNamed(context, '/chatbot');
+    if (index == 3) Navigator.pushNamed(context, '/mapadenuncias');
+  }
+
   @override
   Widget build(BuildContext context) {
     final list = _filtrados;
@@ -147,6 +232,7 @@ class _AyudaScreenState extends State<AyudaScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
 
+      // Drawer (Ayuda activo/resaltado)
       drawer: Drawer(
         child: SafeArea(
           child: Column(
@@ -158,16 +244,47 @@ class _AyudaScreenState extends State<AyudaScreen> {
                 subtitle: Text("usuario@correo.com"),
               ),
               const Divider(),
+
               ListTile(
-                leading: const Icon(Icons.help_outline),
-                title: const Text("Ayuda"),
-                onTap: () => Navigator.pop(context),
+                leading: const Icon(Icons.person_outline),
+                title: const Text("Perfil"),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/perfil');
+                },
               ),
+
+              // ✅ AYUDA ACTIVO (resaltado)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: primaryBlue.withAlpha((0.10 * 255).round()),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: ListTile(
+                  leading: const Icon(Icons.info_outline, color: primaryBlue),
+                  title: const Text(
+                    "Ayuda",
+                    style: TextStyle(
+                      color: primaryBlue,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    // ya estás en ayuda
+                  },
+                ),
+              ),
+
               const Spacer(),
               ListTile(
                 leading: const Icon(Icons.logout),
                 title: const Text("Cerrar sesión"),
-                onTap: () => Navigator.pop(context),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushReplacementNamed(context, '/');
+                },
               ),
               const SizedBox(height: 10),
             ],
@@ -198,7 +315,7 @@ class _AyudaScreenState extends State<AyudaScreen> {
 
       body: Column(
         children: [
-          // Buscador
+          // buscador
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
             child: Container(
@@ -219,8 +336,7 @@ class _AyudaScreenState extends State<AyudaScreen> {
             ),
           ),
 
-          // Chips de sugerencias (como tu mock)
-          // Chips de sugerencias (arreglado: NO overflow)
+          // chips (con scroll horizontal, no overflow)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: SingleChildScrollView(
@@ -228,7 +344,14 @@ class _AyudaScreenState extends State<AyudaScreen> {
               child: Row(
                 children: [
                   _ChipSug(
-                    icon: Icons.favorite_border,
+                    icon: Icons.apps,
+                    text: 'todos',
+                    selected: chipSeleccionado == 'todos',
+                    onTap: () => setState(() => chipSeleccionado = 'todos'),
+                  ),
+                  const SizedBox(width: 8),
+                  _ChipSug(
+                    icon: Icons.report,
                     text: 'como denunciar',
                     selected: chipSeleccionado == 'como denunciar',
                     onTap: () =>
@@ -236,32 +359,33 @@ class _AyudaScreenState extends State<AyudaScreen> {
                   ),
                   const SizedBox(width: 8),
                   _ChipSug(
-                    icon: Icons.access_time,
-                    text: 'que puedo denunciar',
+                    icon: Icons.block,
+                    text: 'restricciones',
                     selected: chipSeleccionado == 'restricciones',
                     onTap: () =>
                         setState(() => chipSeleccionado = 'restricciones'),
                   ),
                   const SizedBox(width: 8),
-
-                  // ✅ NUEVO CHIP: otros
+                  _ChipSug(
+                    icon: Icons.smart_toy,
+                    text: 'chatbot',
+                    selected: chipSeleccionado == 'chatbot',
+                    onTap: () => setState(() => chipSeleccionado = 'chatbot'),
+                  ),
+                  const SizedBox(width: 8),
+                  _ChipSug(
+                    icon: Icons.verified_user,
+                    text: 'registro',
+                    selected: chipSeleccionado == 'registro',
+                    onTap: () => setState(() => chipSeleccionado = 'registro'),
+                  ),
+                  const SizedBox(width: 8),
                   _ChipSug(
                     icon: Icons.more_horiz,
                     text: 'otros',
                     selected: chipSeleccionado == 'otros',
                     onTap: () => setState(() => chipSeleccionado = 'otros'),
                   ),
-                  const SizedBox(width: 8),
-
-                  // ✅ CHIP "todos" (en vez de texto a la derecha)
-                  _ChipSug(
-                    icon: Icons.apps,
-                    text: 'todos',
-                    selected: chipSeleccionado == 'todos',
-                    onTap: () => setState(() => chipSeleccionado = 'todos'),
-                  ),
-
-                  const SizedBox(width: 4),
                 ],
               ),
             ),
@@ -269,7 +393,7 @@ class _AyudaScreenState extends State<AyudaScreen> {
 
           const SizedBox(height: 10),
 
-          // Lista de preguntas
+          // lista
           Expanded(
             child: list.isEmpty
                 ? Center(
@@ -314,10 +438,11 @@ class _AyudaScreenState extends State<AyudaScreen> {
         ],
       ),
 
-      // bottom bar igual a tus pantallas (solo UI)
+      // bottom nav con navegación real
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 0,
-        onTap: (i) {},
+        currentIndex:
+            0, // ayuda NO está en bottom nav, entonces deja inicio fijo o maneja como quieras
+        onTap: _onBottomNavTap,
         type: BottomNavigationBarType.fixed,
         showSelectedLabels: false,
         showUnselectedLabels: false,
@@ -325,12 +450,12 @@ class _AyudaScreenState extends State<AyudaScreen> {
         unselectedItemColor: Colors.grey.shade600,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Inicio"),
-          BottomNavigationBarItem(icon: Icon(Icons.search), label: "Buscar"),
-          BottomNavigationBarItem(icon: Icon(Icons.swap_horiz), label: "Mov"),
           BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet),
-            label: "Wallet",
+            icon: Icon(Icons.format_align_center),
+            label: "denuncias",
           ),
+          BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: "chat"),
+          BottomNavigationBarItem(icon: Icon(Icons.map), label: "mapa"),
         ],
       ),
     );
@@ -338,7 +463,7 @@ class _AyudaScreenState extends State<AyudaScreen> {
 
   String _preview(String text) {
     final clean = text.replaceAll('\n', ' ');
-    return clean.length <= 38 ? clean : '${clean.substring(0, 38)}...';
+    return clean.length <= 52 ? clean : '${clean.substring(0, 52)}...';
   }
 }
 

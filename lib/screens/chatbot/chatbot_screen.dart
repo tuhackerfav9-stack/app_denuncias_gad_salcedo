@@ -7,13 +7,21 @@ class ChatbotScreen extends StatefulWidget {
   State<ChatbotScreen> createState() => _ChatbotScreenState();
 }
 
-class _ChatbotScreenState extends State<ChatbotScreen> {
+class _ChatbotScreenState extends State<ChatbotScreen>
+    with WidgetsBindingObserver {
   static const Color primaryBlue = Color(0xFF2C64C4);
 
   final TextEditingController msgController = TextEditingController();
   final ScrollController scrollController = ScrollController();
+  final FocusNode inputFocus = FocusNode();
 
-  // Solo UI (mensajes dummy)
+  // navegación inferior
+  int currentIndex = 2;
+
+  // para ocultar el bottom nav cuando aparece teclado
+  bool _keyboardVisible = false;
+
+  // mensajes dummy
   final List<_ChatMessage> messages = [
     _ChatMessage(
       text: 'Esta es la plantilla principal de chat',
@@ -39,12 +47,36 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    // detectar focus para ocultar/reaparecer bottom nav (extra)
+    inputFocus.addListener(() {
+      setState(() {});
+    });
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     msgController.dispose();
     scrollController.dispose();
+    inputFocus.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeMetrics() {
+    // cuando aparece teclado cambia el viewInsets.bottom
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final visible = bottom > 0;
+    if (visible != _keyboardVisible) {
+      setState(() => _keyboardVisible = visible);
+    }
+  }
+
+  // ================== enviar texto ==================
   void _sendText() {
     final text = msgController.text.trim();
     if (text.isEmpty) return;
@@ -57,11 +89,11 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     _scrollToBottom();
 
     // SOLO UI: simular respuesta del bot
-    Future.delayed(const Duration(milliseconds: 400), () {
+    Future.delayed(const Duration(milliseconds: 450), () {
       setState(() {
         messages.add(
           _ChatMessage(
-            text: 'Entendido. ¿Qué deseas denunciar? (solo frontend)',
+            text: 'Entendido ✅ ¿Qué deseas denunciar? (solo frontend)',
             isMe: false,
           ),
         );
@@ -71,16 +103,17 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   }
 
   void _scrollToBottom() {
-    Future.delayed(const Duration(milliseconds: 50), () {
+    Future.delayed(const Duration(milliseconds: 60), () {
       if (!scrollController.hasClients) return;
       scrollController.animateTo(
-        scrollController.position.maxScrollExtent + 120,
-        duration: const Duration(milliseconds: 250),
+        scrollController.position.maxScrollExtent + 200,
+        duration: const Duration(milliseconds: 260),
         curve: Curves.easeOut,
       );
     });
   }
 
+  // ================== adjuntos (solo UI) ==================
   void _openAttachmentsSheet() {
     showModalBottomSheet(
       context: context,
@@ -116,14 +149,6 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                     _toast('Adjuntar documento (solo UI)');
                   },
                 ),
-                _AttachTile(
-                  icon: Icons.mic,
-                  title: 'Audio',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _toast('Grabar/Adjuntar audio (solo UI)');
-                  },
-                ),
               ],
             ),
           ),
@@ -136,64 +161,129 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  // ================== navegación inferior ==================
+  void _onBottomNavTap(int index) {
+    setState(() => currentIndex = index);
+
+    if (index == 0) Navigator.pushNamed(context, '/denuncias');
+    if (index == 1) Navigator.pushNamed(context, '/form/denuncias');
+    if (index == 2) {
+      // ya estás en /chatbot
+    }
+    if (index == 3) Navigator.pushNamed(context, '/mapadenuncias');
+  }
+
+  // ================== menú perfil (arriba derecha) ==================
+  void _onProfileMenu(String value) {
+    switch (value) {
+      case 'perfil':
+        Navigator.pushNamed(context, '/perfil');
+        break;
+      case 'ayuda':
+        Navigator.pushNamed(context, '/ayuda');
+        break;
+      case 'cerrar':
+        Navigator.pushReplacementNamed(context, '/');
+        break;
+    }
+  }
+
+  // ================== UI ==================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
 
-      // Top bar como tu imagen
+      // Drawer (izquierda)
+      drawer: Drawer(
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              const ListTile(
+                leading: CircleAvatar(child: Icon(Icons.person)),
+                title: Text("Ciudadano"),
+                subtitle: Text("usuario@correo.com"),
+              ),
+              const Divider(),
+
+              ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: const Text("Perfil"),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/perfil');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: const Text("Ayuda"),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/ayuda');
+                },
+              ),
+              const Spacer(),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text("Cerrar sesión"),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushReplacementNamed(context, '/');
+                },
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        ),
+      ),
+
+      // AppBar superior (manteniendo estética)
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
-          onPressed: () => Navigator.pop(context),
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: primaryBlue),
+        title: const Text(
+          "Chatbot",
+          style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
         ),
-        titleSpacing: 0,
-        title: Row(
-          children: [
-            const CircleAvatar(
-              radius: 18,
-              backgroundImage: AssetImage(
-                'assets/profile_dummy.png',
-              ), // si no tienes, cambia a Icon
-              // child: Icon(Icons.person),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'Helena Hills',
-                    style: TextStyle(
-                      color: Colors.black87,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Activo hace 11 minutos',
-                    style: TextStyle(color: Colors.grey, fontSize: 11.5),
-                  ),
-                ],
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: _onProfileMenu,
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'perfil', child: Text("Ver perfil")),
+              PopupMenuItem(value: 'ayuda', child: Text("Ayuda")),
+              PopupMenuItem(value: 'cerrar', child: Text("Cerrar sesión")),
+            ],
+            child: Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: Colors.grey.shade300,
+                child: const Icon(
+                  Icons.person,
+                  color: Colors.black54,
+                  size: 18,
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
 
       body: Column(
         children: [
-          // Mensajes
+          // mensajes
           Expanded(
             child: ListView.builder(
               controller: scrollController,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              itemCount: messages.length + 1,
+              itemCount: messages.length + 2,
               itemBuilder: (context, i) {
-                // Fecha centrada (como la imagen)
+                if (i == 0) return const SizedBox(height: 6);
+
+                // fecha centrada
                 if (i == 1) {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
@@ -209,22 +299,19 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                   );
                 }
 
-                if (i == 0) return const SizedBox(height: 8);
-
-                final msg = messages[i - 1];
+                final msg = messages[i - 2];
                 return _Bubble(message: msg);
               },
             ),
           ),
 
-          // Input bottom
+          // input (sin emojis, sin audio)
           SafeArea(
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
               child: Row(
                 children: [
-                  // Caja de texto
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
@@ -235,25 +322,22 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                       child: Row(
                         children: [
                           IconButton(
-                            onPressed: () => _toast('Emoji (solo UI)'),
-                            icon: const Icon(Icons.emoji_emotions_outlined),
+                            onPressed: _openAttachmentsSheet,
+                            icon: const Icon(Icons.attach_file),
                             color: Colors.grey.shade700,
                           ),
                           Expanded(
                             child: TextField(
+                              focusNode: inputFocus,
                               controller: msgController,
                               minLines: 1,
                               maxLines: 4,
+                              onChanged: (_) => setState(() {}),
                               decoration: const InputDecoration(
                                 hintText: 'Mensaje...',
                                 border: InputBorder.none,
                               ),
                             ),
-                          ),
-                          IconButton(
-                            onPressed: _openAttachmentsSheet,
-                            icon: const Icon(Icons.attach_file),
-                            color: Colors.grey.shade700,
                           ),
                         ],
                       ),
@@ -261,7 +345,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                   ),
                   const SizedBox(width: 8),
 
-                  // Mic / Send (si hay texto manda, si no, mic)
+                  // botón enviar SIEMPRE (solo texto)
                   Container(
                     width: 48,
                     height: 48,
@@ -270,19 +354,8 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
-                      onPressed: () {
-                        if (msgController.text.trim().isNotEmpty) {
-                          _sendText();
-                        } else {
-                          _toast('Grabar audio (solo UI)');
-                        }
-                      },
-                      icon: Icon(
-                        msgController.text.trim().isNotEmpty
-                            ? Icons.send
-                            : Icons.mic,
-                        color: Colors.white,
-                      ),
+                      onPressed: _sendText,
+                      icon: const Icon(Icons.send, color: Colors.white),
                     ),
                   ),
                 ],
@@ -291,11 +364,39 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
           ),
         ],
       ),
+
+      // bottom nav (se oculta cuando aparece teclado)
+      bottomNavigationBar: _keyboardVisible
+          ? null
+          : BottomNavigationBar(
+              currentIndex: currentIndex,
+              onTap: _onBottomNavTap,
+              type: BottomNavigationBarType.fixed,
+              showSelectedLabels: false,
+              showUnselectedLabels: false,
+              selectedItemColor: primaryBlue,
+              unselectedItemColor: Colors.grey.shade600,
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.home),
+                  label: "Inicio",
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.format_align_center),
+                  label: "denuncias",
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.smart_toy),
+                  label: "chat",
+                ),
+                BottomNavigationBarItem(icon: Icon(Icons.map), label: "mapa"),
+              ],
+            ),
     );
   }
 }
 
-// ===== Widgets internos =====
+// ===== modelos y widgets internos =====
 
 class _ChatMessage {
   final String text;

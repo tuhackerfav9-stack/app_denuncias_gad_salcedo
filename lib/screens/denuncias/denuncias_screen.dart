@@ -12,24 +12,6 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
 
   int currentIndex = 0;
 
-  // Menú del perfil (arriba derecha)
-  void _onProfileMenu(String value) {
-    switch (value) {
-      case 'perfil':
-        // Navigator.pushNamed(context, '/perfil');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Ir a Perfil (solo frontend)")),
-        );
-        break;
-      case 'cerrar':
-        // Navigator.pushReplacementNamed(context, '/login');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Cerrar sesión (solo frontend)")),
-        );
-        break;
-    }
-  }
-
   // Navegación inferior
   void _onBottomNavTap(int index) {
     setState(() => currentIndex = index);
@@ -56,24 +38,21 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
                 subtitle: Text("usuario@correo.com"),
               ),
               const Divider(),
-              ListTile(
-                leading: const Icon(Icons.report),
-                title: const Text("Mis Denuncias"),
-                onTap: () => Navigator.pop(context),
-              ),
+
               ListTile(
                 leading: const Icon(Icons.person_outline),
                 title: const Text("Perfil"),
                 onTap: () {
                   Navigator.pop(context);
-                  // Navigator.pushNamed(context, '/perfil');
+                  Navigator.pushNamed(context, '/perfil');
                 },
               ),
               ListTile(
                 leading: const Icon(Icons.info_outline),
-                title: const Text("Acerca de"),
+                title: const Text("Ayuda"),
                 onTap: () {
                   Navigator.pop(context);
+                  Navigator.pushNamed(context, '/ayuda');
                 },
               ),
               const Spacer(),
@@ -82,7 +61,7 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
                 title: const Text("Cerrar sesión"),
                 onTap: () {
                   Navigator.pop(context);
-                  // Navigator.pushReplacementNamed(context, '/login');
+                  Navigator.pushReplacementNamed(context, '/');
                 },
               ),
               const SizedBox(height: 10),
@@ -102,25 +81,14 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
           style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
         ),
 
-        // Avatar + menú perfil
+        // Avatar
         actions: [
-          PopupMenuButton<String>(
-            onSelected: _onProfileMenu,
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'perfil', child: Text("Ver perfil")),
-              PopupMenuItem(value: 'cerrar', child: Text("Cerrar sesión")),
-            ],
-            child: Padding(
-              padding: const EdgeInsets.only(right: 14),
-              child: CircleAvatar(
-                radius: 16,
-                backgroundColor: Colors.grey.shade300,
-                child: const Icon(
-                  Icons.person,
-                  color: Colors.black54,
-                  size: 18,
-                ),
-              ),
+          Padding(
+            padding: const EdgeInsets.only(right: 14),
+            child: CircleAvatar(
+              radius: 16,
+              backgroundColor: Colors.grey.shade300,
+              child: const Icon(Icons.person, color: Colors.black54, size: 18),
             ),
           ),
         ],

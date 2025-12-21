@@ -157,18 +157,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  //  Menú del perfil (arriba derecha)
-  void _onProfileMenu(String value) {
-    switch (value) {
-      case 'perfil':
-        _snack("Ir a Perfil (solo frontend)");
-        break;
-      case 'cerrar':
-        _snack("Cerrar sesión (solo frontend)");
-        break;
-    }
-  }
-
   //  Navegación inferior
   void _onBottomNavTap(int index) {
     setState(() => currentIndex = index);
@@ -197,19 +185,21 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                 subtitle: Text("usuario@correo.com"),
               ),
               const Divider(),
-              ListTile(
-                leading: const Icon(Icons.report),
-                title: const Text("Mis Denuncias"),
-                onTap: () {
-                  Navigator.pop(context);
-                  // Navigator.pushNamed(context, '/denuncias');
-                },
-              ),
+
               ListTile(
                 leading: const Icon(Icons.person_outline),
                 title: const Text("Perfil"),
                 onTap: () {
                   Navigator.pop(context);
+                  Navigator.pushNamed(context, '/perfil');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: const Text("Ayuda"),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/ayuda');
                 },
               ),
               const Spacer(),
@@ -218,6 +208,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                 title: const Text("Cerrar sesión"),
                 onTap: () {
                   Navigator.pop(context);
+                  Navigator.pushReplacementNamed(context, '/');
                 },
               ),
               const SizedBox(height: 10),
@@ -236,24 +227,15 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
           "Denuncias",
           style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
         ),
+
+        // Avatar
         actions: [
-          PopupMenuButton<String>(
-            onSelected: _onProfileMenu,
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'perfil', child: Text("Ver perfil")),
-              PopupMenuItem(value: 'cerrar', child: Text("Cerrar sesión")),
-            ],
-            child: Padding(
-              padding: const EdgeInsets.only(right: 14),
-              child: CircleAvatar(
-                radius: 16,
-                backgroundColor: Colors.grey.shade300,
-                child: const Icon(
-                  Icons.person,
-                  color: Colors.black54,
-                  size: 18,
-                ),
-              ),
+          Padding(
+            padding: const EdgeInsets.only(right: 14),
+            child: CircleAvatar(
+              radius: 16,
+              backgroundColor: Colors.grey.shade300,
+              child: const Icon(Icons.person, color: Colors.black54, size: 18),
             ),
           ),
         ],

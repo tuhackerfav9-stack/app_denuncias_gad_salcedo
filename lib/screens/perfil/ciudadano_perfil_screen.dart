@@ -13,6 +13,17 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
   static const Color primaryBlue = Color(0xFF2C64C4);
 
   final formKey = GlobalKey<FormState>();
+  // navegación inferior
+  int currentIndex = 0;
+  // ====== bottom nav ======
+  void _onBottomNavTap(int index) {
+    setState(() => currentIndex = index);
+
+    if (index == 0) Navigator.pushNamed(context, '/denuncias');
+    if (index == 1) Navigator.pushNamed(context, '/form/denuncias');
+    if (index == 2) Navigator.pushNamed(context, '/chatbot');
+    if (index == 3) Navigator.pushNamed(context, '/mapadenuncias');
+  }
 
   // Controllers
   final cedulaController = TextEditingController(text: '0500000000');
@@ -138,7 +149,7 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
     }
 
     // SOLO UI
-    _snack('Datos guardados ✅ (solo frontend)');
+    _snack('Datos guardados   (solo frontend)');
 
     // Actualiza "original" para que ya no marque cambios
     setState(() {
@@ -167,6 +178,7 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
 
+      // Drawer (Ayuda activo/resaltado)
       drawer: Drawer(
         child: SafeArea(
           child: Column(
@@ -178,16 +190,45 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
                 subtitle: Text("usuario@correo.com"),
               ),
               const Divider(),
+
+              // ✅ AYUDA ACTIVO (resaltado)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: primaryBlue.withAlpha((0.10 * 255).round()),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: ListTile(
+                  leading: const Icon(Icons.info_outline, color: primaryBlue),
+                  title: const Text(
+                    "Perfil",
+                    style: TextStyle(
+                      color: primaryBlue,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    // ya estás en perfil
+                  },
+                ),
+              ),
               ListTile(
                 leading: const Icon(Icons.person_outline),
-                title: const Text("Perfil"),
-                onTap: () => Navigator.pop(context),
+                title: const Text("Ayuda"),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/ayuda');
+                },
               ),
               const Spacer(),
               ListTile(
                 leading: const Icon(Icons.logout),
                 title: const Text("Cerrar sesión"),
-                onTap: () => Navigator.pop(context),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushReplacementNamed(context, ' /');
+                },
               ),
               const SizedBox(height: 10),
             ],
@@ -424,12 +465,11 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
         ),
       ),
 
-      // (Opcional) bottom bar como tus pantallas
+      // bottom nav con navegación real
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 0,
-        onTap: (i) {
-          // Aquí conectas rutas luego
-        },
+        currentIndex:
+            0, // ayuda NO está en bottom nav, entonces deja inicio fijo o maneja como quieras
+        onTap: _onBottomNavTap,
         type: BottomNavigationBarType.fixed,
         showSelectedLabels: false,
         showUnselectedLabels: false,
@@ -437,12 +477,12 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
         unselectedItemColor: Colors.grey.shade600,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Inicio"),
-          BottomNavigationBarItem(icon: Icon(Icons.search), label: "Buscar"),
-          BottomNavigationBarItem(icon: Icon(Icons.swap_horiz), label: "Mov"),
           BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet),
-            label: "Wallet",
+            icon: Icon(Icons.format_align_center),
+            label: "denuncias",
           ),
+          BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: "chat"),
+          BottomNavigationBarItem(icon: Icon(Icons.map), label: "mapa"),
         ],
       ),
     );
