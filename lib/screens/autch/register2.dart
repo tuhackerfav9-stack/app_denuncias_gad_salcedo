@@ -19,14 +19,164 @@ class _Register2State extends State<Register2> {
     super.dispose();
   }
 
-  void verificarCorreo() {
-    if (formKey.currentState!.validate()) {
-      // ✅ Aquí luego conectas: enviar código al correo (backend)
-      // Por ahora solo UI:
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Correo válido ✅ (solo frontend)')),
-      );
+  Future<void> verificarCorreo() async {
+    if (!formKey.currentState!.validate()) return;
+
+    //   Solo frontend: simular envío
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Código enviado  (solo frontend)')),
+    );
+
+    final ok = await _mostrarDialogOTP();
+
+    if (ok == true && mounted) {
+      Navigator.pushNamed(context, '/register3');
     }
+  }
+
+  Future<bool?> _mostrarDialogOTP() async {
+    final controllers = List.generate(6, (_) => TextEditingController());
+    final focusNodes = List.generate(6, (_) => FocusNode());
+
+    String getCodigo() => controllers.map((c) => c.text.trim()).join();
+
+    bool? result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        void onChanged(int index, String value) {
+          // Solo 1 dígito
+          if (value.length > 1) {
+            controllers[index].text = value.substring(value.length - 1);
+            controllers[index].selection = const TextSelection.collapsed(
+              offset: 1,
+            );
+          }
+
+          // Avanza al siguiente
+          if (controllers[index].text.isNotEmpty && index < 5) {
+            focusNodes[index + 1].requestFocus();
+          }
+        }
+
+        void verificar() {
+          final code = getCodigo();
+          if (code.length != 6) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Ingresa los 6 dígitos')),
+            );
+            return;
+          }
+
+          Navigator.pop(ctx, true);
+        }
+
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'Verificar correo',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: primaryBlue,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Codigo',
+                  style: TextStyle(
+                    color: primaryBlue,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(6, (i) {
+                    return SizedBox(
+                      width: 40,
+                      child: TextField(
+                        controller: controllers[i],
+                        focusNode: focusNodes[i],
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        maxLength: 1,
+                        decoration: InputDecoration(
+                          counterText: '',
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                              color: primaryBlue,
+                              width: 1.4,
+                            ),
+                          ),
+                        ),
+                        onChanged: (v) => onChanged(i, v),
+                      ),
+                    );
+                  }),
+                ),
+
+                const SizedBox(height: 16),
+
+                SizedBox(
+                  height: 44,
+                  child: TextButton(
+                    onPressed: verificar,
+                    style: TextButton.styleFrom(
+                      backgroundColor: primaryBlue,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text(
+                      'Verificar Cuenta',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    //   limpiar memoria
+    for (final c in controllers) {
+      c.dispose();
+    }
+    for (final f in focusNodes) {
+      f.dispose();
+    }
+
+    return result;
   }
 
   @override
@@ -44,7 +194,6 @@ class _Register2State extends State<Register2> {
                 children: [
                   const SizedBox(height: 10),
 
-                  // LOGO ARRIBA
                   Image.asset(
                     'assets/logo_gad_municipal_letras.png',
                     height: 95,
@@ -53,7 +202,6 @@ class _Register2State extends State<Register2> {
 
                   const SizedBox(height: 70),
 
-                  // LABEL
                   const Text(
                     'Correo Electrónico',
                     style: TextStyle(
@@ -64,26 +212,24 @@ class _Register2State extends State<Register2> {
                   ),
                   const SizedBox(height: 8),
 
-                  // INPUT CORREO (con validación)
                   TextFormField(
                     controller: correoController,
                     keyboardType: TextInputType.emailAddress,
                     decoration: _inputDecoration(hint: 'ej.juancasa@gmail.com'),
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'El correo es requerido';
-                      }
+                      final value = (v ?? '').trim();
+                      if (value.isEmpty) return 'El correo es requerido';
                       final emailOk = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
-                      if (!emailOk.hasMatch(v.trim())) {
+                      if (!emailOk.hasMatch(value)) {
                         return 'Ingresa un correo válido';
                       }
+
                       return null;
                     },
                   ),
 
                   const SizedBox(height: 14),
 
-                  // BOTÓN (si quieres TextButton como tú usas)
                   SizedBox(
                     height: 48,
                     child: TextButton(
@@ -107,7 +253,6 @@ class _Register2State extends State<Register2> {
 
                   const SizedBox(height: 18),
 
-                  // TÉRMINOS
                   Text.rich(
                     TextSpan(
                       style: TextStyle(
@@ -140,7 +285,6 @@ class _Register2State extends State<Register2> {
 
                   const SizedBox(height: 70),
 
-                  // IMAGEN ABAJO
                   Image.asset(
                     'assets/logo_gad_municipal_claro animacion.png',
                     height: 120,

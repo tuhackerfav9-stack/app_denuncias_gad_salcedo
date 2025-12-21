@@ -24,20 +24,45 @@ class _Register3State extends State<Register3> {
     super.dispose();
   }
 
+  bool _fechaValida(int d, int m, int y) {
+    try {
+      final date = DateTime(y, m, d);
+      return date.year == y && date.month == m && date.day == d;
+    } catch (_) {
+      return false;
+    }
+  }
+
   void continuar() {
-    if (!formKey.currentState!.validate()) return;
+    final ok = formKey.currentState!.validate();
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Revisa la fecha (DD/MM/YYYY)')),
+      );
+      return;
+    }
 
-    final dd = ddController.text.trim();
-    final mm = mmController.text.trim();
-    final yyyy = yyyyController.text.trim();
+    final dd = int.parse(ddController.text.trim());
+    final mm = int.parse(mmController.text.trim());
+    final yyyy = int.parse(yyyyController.text.trim());
 
-    // ✅ aquí luego guardas en sesión/variable global del registro
+    if (!_fechaValida(dd, mm, yyyy)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Fecha inválida. Ej: 05/09/2002')),
+      );
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Fecha válida ✅ $dd/$mm/$yyyy (solo frontend)')),
+      SnackBar(
+        content: Text(
+          'Fecha válida   ${ddController.text}/${mmController.text}/${yyyyController.text}',
+        ),
+      ),
     );
 
-    // Ejemplo navegación (si luego tienes register4):
-    // Navigator.pushNamed(context, '/register4');
+    //   navegar a register4
+    Navigator.pushNamed(context, '/register4');
   }
 
   @override
@@ -55,7 +80,6 @@ class _Register3State extends State<Register3> {
                 children: [
                   const SizedBox(height: 10),
 
-                  // LOGO ARRIBA
                   Image.asset(
                     'assets/logo_gad_municipal_letras.png',
                     height: 95,
@@ -64,7 +88,6 @@ class _Register3State extends State<Register3> {
 
                   const SizedBox(height: 80),
 
-                  // LABEL
                   const Text(
                     'Fecha de Nacimiento',
                     style: TextStyle(
@@ -76,7 +99,6 @@ class _Register3State extends State<Register3> {
 
                   const SizedBox(height: 12),
 
-                  // DD / MM / YYYY
                   Row(
                     children: [
                       Expanded(
@@ -87,9 +109,10 @@ class _Register3State extends State<Register3> {
                           decoration: _smallInputDecoration(hint: 'DD'),
                           validator: (v) {
                             final value = (v ?? '').trim();
-                            if (value.isEmpty) return ' ';
+                            if (value.isEmpty) return ' dia';
                             final n = int.tryParse(value);
-                            if (n == null || n < 1 || n > 31) return ' ';
+                            if (n == null) return 'Solo números';
+                            if (n < 1 || n > 31) return '1 - 31';
                             return null;
                           },
                         ),
@@ -103,9 +126,10 @@ class _Register3State extends State<Register3> {
                           decoration: _smallInputDecoration(hint: 'MM'),
                           validator: (v) {
                             final value = (v ?? '').trim();
-                            if (value.isEmpty) return ' ';
+                            if (value.isEmpty) return ' mes';
                             final n = int.tryParse(value);
-                            if (n == null || n < 1 || n > 12) return ' ';
+                            if (n == null) return 'Solo números';
+                            if (n < 1 || n > 12) return '1 - 12';
                             return null;
                           },
                         ),
@@ -120,12 +144,12 @@ class _Register3State extends State<Register3> {
                           decoration: _smallInputDecoration(hint: 'YYYY'),
                           validator: (v) {
                             final value = (v ?? '').trim();
-                            if (value.isEmpty) return ' ';
+                            if (value.isEmpty) return ' año';
                             final n = int.tryParse(value);
-                            if (n == null ||
-                                n < 1900 ||
-                                n > DateTime.now().year) {
-                              return ' ';
+                            if (n == null) return 'Solo números';
+                            final yearNow = DateTime.now().year;
+                            if (n < 1900 || n > yearNow) {
+                              return '1900 - $yearNow';
                             }
 
                             return null;
@@ -135,9 +159,16 @@ class _Register3State extends State<Register3> {
                     ],
                   ),
 
+                  const SizedBox(height: 6),
+
+                  //   Mensaje de ayuda (se ve bonito y evita confusión)
+                  Text(
+                    'Ejemplo: 05 / 09 / 2002',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
+
                   const SizedBox(height: 14),
 
-                  // BOTÓN CONTINUAR
                   SizedBox(
                     height: 48,
                     child: TextButton(
@@ -161,7 +192,6 @@ class _Register3State extends State<Register3> {
 
                   const SizedBox(height: 18),
 
-                  // TÉRMINOS
                   Text.rich(
                     TextSpan(
                       style: TextStyle(
@@ -194,7 +224,6 @@ class _Register3State extends State<Register3> {
 
                   const SizedBox(height: 90),
 
-                  // IMAGEN ABAJO
                   Image.asset(
                     'assets/logo_gad_municipal_claro animacion.png',
                     height: 120,
@@ -209,10 +238,9 @@ class _Register3State extends State<Register3> {
     );
   }
 
-  // Decoración de inputs pequeños tipo DD/MM/YYYY (igual mock)
   static InputDecoration _smallInputDecoration({required String hint}) {
     return InputDecoration(
-      counterText: '', // oculta contador maxLength
+      counterText: '',
       hintText: hint,
       hintStyle: TextStyle(color: Colors.grey.shade600),
       filled: true,

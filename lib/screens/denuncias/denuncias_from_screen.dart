@@ -145,11 +145,11 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
       return;
     }
 
-    _snack('Denuncia lista ✅ (solo frontend)');
+    _snack('Denuncia lista   (solo frontend)');
   }
 
   void _abrirChatbot() {
-    // Navigator.pushNamed(context, '/chatbot');
+    Navigator.pushNamed(context, '/chatbot');
     _snack('Chatbot 🤖 (solo frontend)');
   }
 
@@ -174,10 +174,10 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     setState(() => currentIndex = index);
 
     // Aquí conectas tus rutas reales:
-    // if (index == 0) Navigator.pushNamed(context, '/denuncias');
-    // if (index == 1) Navigator.pushNamed(context, '/form/denuncias'); // estás aquí
-    // if (index == 2) Navigator.pushNamed(context, '/historial');
-    // if (index == 3) Navigator.pushNamed(context, '/cartera');
+    if (index == 0) Navigator.pushNamed(context, '/denuncias');
+    if (index == 1) Navigator.pushNamed(context, '/form/denuncias');
+    if (index == 2) Navigator.pushNamed(context, '/chatbot');
+    if (index == 3) Navigator.pushNamed(context, '/mapadenuncias');
   }
 
   @override
@@ -500,14 +500,11 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Inicio"),
           BottomNavigationBarItem(
-            icon: Icon(Icons.search),
-            label: "Buscar",
+            icon: Icon(Icons.format_align_center),
+            label: "denuncias",
           ), // este queda activo
-          BottomNavigationBarItem(icon: Icon(Icons.swap_horiz), label: "Mov"),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet),
-            label: "Wallet",
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: "chat"),
+          BottomNavigationBarItem(icon: Icon(Icons.map), label: "mapa"),
         ],
       ),
     );

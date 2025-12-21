@@ -1,51 +1,38 @@
 import 'package:flutter/material.dart';
 
-class Register5 extends StatefulWidget {
-  const Register5({super.key});
+class CambiarPassword extends StatefulWidget {
+  const CambiarPassword({super.key});
 
   @override
-  State<Register5> createState() => _Register5State();
+  State<CambiarPassword> createState() => _CambiarPasswordState();
 }
 
-class _Register5State extends State<Register5> {
+class _CambiarPasswordState extends State<CambiarPassword> {
   static const Color primaryBlue = Color(0xFF2C64C4);
 
   final formKey = GlobalKey<FormState>();
+  final pass1 = TextEditingController();
+  final pass2 = TextEditingController();
 
-  final passController = TextEditingController();
-  final pass2Controller = TextEditingController();
-
-  bool aceptarTerminos = false;
-  bool ocultar1 = true;
-  bool ocultar2 = true;
+  bool o1 = true;
+  bool o2 = true;
 
   @override
   void dispose() {
-    passController.dispose();
-    pass2Controller.dispose();
+    pass1.dispose();
+    pass2.dispose();
     super.dispose();
   }
 
-  void iniciar() {
+  void guardar() {
     if (!formKey.currentState!.validate()) return;
 
-    if (!aceptarTerminos) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Debes aceptar los Términos y la Política  '),
-        ),
-      );
-      return;
-    }
-
-    //   aquí luego conectas: crear usuario / guardar en backend / supabase
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Registro listo   (solo frontend)')),
+      const SnackBar(content: Text('Contraseña actualizada ✅ (solo frontend)')),
     );
 
-    // Ejemplo:
-    // Navigator.pushReplacementNamed(context, '/');
-    Navigator.pushNamed(context, '/denuncias');
+    // volver al login
+    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
   }
 
   @override
@@ -63,7 +50,6 @@ class _Register5State extends State<Register5> {
                 children: [
                   const SizedBox(height: 10),
 
-                  // LOGO ARRIBA
                   Image.asset(
                     'assets/logo_gad_municipal_letras.png',
                     height: 95,
@@ -72,9 +58,20 @@ class _Register5State extends State<Register5> {
 
                   const SizedBox(height: 70),
 
-                  // CONTRASEÑA
                   const Text(
-                    'Contraseña',
+                    'Cambiar Contraseña',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: primaryBlue,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  const Text(
+                    'Nueva contraseña',
                     style: TextStyle(
                       color: primaryBlue,
                       fontSize: 14,
@@ -83,21 +80,20 @@ class _Register5State extends State<Register5> {
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
-                    controller: passController,
-                    obscureText: ocultar1,
+                    controller: pass1,
+                    obscureText: o1,
                     decoration: _inputDecoration(
                       hint: '***************',
                       suffixIcon: IconButton(
-                        onPressed: () => setState(() => ocultar1 = !ocultar1),
+                        onPressed: () => setState(() => o1 = !o1),
                         icon: Icon(
-                          ocultar1 ? Icons.visibility_off : Icons.visibility,
-                          color: Colors.grey.shade600,
+                          o1 ? Icons.visibility_off : Icons.visibility,
                         ),
                       ),
                     ),
                     validator: (v) {
                       final value = (v ?? '').trim();
-                      if (value.isEmpty) return 'La contraseña es requerida';
+                      if (value.isEmpty) return 'Requerida';
                       if (value.length < 6) return 'Mínimo 6 caracteres';
                       return null;
                     },
@@ -105,7 +101,6 @@ class _Register5State extends State<Register5> {
 
                   const SizedBox(height: 18),
 
-                  // REPETIR CONTRASEÑA
                   const Text(
                     'Repetir contraseña',
                     style: TextStyle(
@@ -116,83 +111,31 @@ class _Register5State extends State<Register5> {
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
-                    controller: pass2Controller,
-                    obscureText: ocultar2,
+                    controller: pass2,
+                    obscureText: o2,
                     decoration: _inputDecoration(
                       hint: '***************',
                       suffixIcon: IconButton(
-                        onPressed: () => setState(() => ocultar2 = !ocultar2),
+                        onPressed: () => setState(() => o2 = !o2),
                         icon: Icon(
-                          ocultar2 ? Icons.visibility_off : Icons.visibility,
-                          color: Colors.grey.shade600,
+                          o2 ? Icons.visibility_off : Icons.visibility,
                         ),
                       ),
                     ),
                     validator: (v) {
                       final value = (v ?? '').trim();
-                      if (value.isEmpty) return 'Repite la contraseña';
-                      if (value != passController.text.trim()) {
-                        return 'Las contraseñas no coinciden';
-                      }
+                      if (value.isEmpty) return 'Requerida';
+                      if (value != pass1.text.trim()) return 'No coinciden';
                       return null;
                     },
                   ),
 
-                  const SizedBox(height: 10),
-
-                  // CHECK TÉRMINOS (como tu mock)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Checkbox(
-                        value: aceptarTerminos,
-                        activeColor: primaryBlue,
-                        onChanged: (v) =>
-                            setState(() => aceptarTerminos = v ?? false),
-                      ),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 10),
-                          child: Text.rich(
-                            TextSpan(
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 11.5,
-                              ),
-                              children: const [
-                                TextSpan(
-                                  text: 'Al hacer clic, aceptas nuestros ',
-                                ),
-                                TextSpan(
-                                  text: 'Términos de Servicio',
-                                  style: TextStyle(
-                                    color: Colors.black87,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                TextSpan(text: '\ny nuestra '),
-                                TextSpan(
-                                  text: 'Política de Privacidad',
-                                  style: TextStyle(
-                                    color: Colors.black87,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
                   const SizedBox(height: 14),
 
-                  // BOTÓN INICIAR
                   SizedBox(
                     height: 48,
                     child: TextButton(
-                      onPressed: iniciar,
+                      onPressed: guardar,
                       style: TextButton.styleFrom(
                         backgroundColor: primaryBlue,
                         foregroundColor: Colors.white,
@@ -201,7 +144,7 @@ class _Register5State extends State<Register5> {
                         ),
                       ),
                       child: const Text(
-                        'Iniciar',
+                        'Guardar',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -212,7 +155,6 @@ class _Register5State extends State<Register5> {
 
                   const SizedBox(height: 70),
 
-                  // IMAGEN ABAJO
                   Image.asset(
                     'assets/logo_gad_municipal_claro animacion.png',
                     height: 120,
@@ -233,8 +175,8 @@ class _Register5State extends State<Register5> {
   }) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(color: Colors.grey.shade500),
       suffixIcon: suffixIcon,
+      hintStyle: const TextStyle(color: Colors.grey),
       filled: true,
       fillColor: Colors.white,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

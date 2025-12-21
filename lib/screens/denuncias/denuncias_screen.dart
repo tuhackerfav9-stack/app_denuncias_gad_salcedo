@@ -35,10 +35,10 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
     setState(() => currentIndex = index);
 
     // Aquí luego conectas rutas reales:
-    // if(index==0) Navigator.pushNamed(context,'/denuncias');
-    // if(index==1) Navigator.pushNamed(context,'/buscar');
-    // if(index==2) Navigator.pushNamed(context,'/historial');
-    // if(index==3) Navigator.pushNamed(context,'/cartera');
+    if (index == 0) Navigator.pushNamed(context, '/denuncias');
+    if (index == 1) Navigator.pushNamed(context, '/form/denuncias');
+    if (index == 2) Navigator.pushNamed(context, '/chatbot');
+    if (index == 3) Navigator.pushNamed(context, '/mapadenuncias');
   }
 
   @override
@@ -134,7 +134,7 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
         backgroundColor: primaryBlue,
         shape: const CircleBorder(),
         onPressed: () {
-          // Navigator.pushNamed(context, '/denuncia/form');
+          Navigator.pushNamed(context, '/form/denuncias');
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Nueva denuncia (solo frontend)")),
           );
@@ -153,12 +153,12 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
         unselectedItemColor: Colors.grey.shade600,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Inicio"),
-          BottomNavigationBarItem(icon: Icon(Icons.search), label: "Buscar"),
-          BottomNavigationBarItem(icon: Icon(Icons.swap_horiz), label: "Mov"),
           BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet),
-            label: "Wallet",
+            icon: Icon(Icons.format_align_center),
+            label: "denuncias",
           ),
+          BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: "chat"),
+          BottomNavigationBarItem(icon: Icon(Icons.map), label: "mapa"),
         ],
       ),
     );

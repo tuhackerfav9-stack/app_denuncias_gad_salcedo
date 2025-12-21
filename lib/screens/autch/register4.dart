@@ -17,39 +17,85 @@ class _Register4State extends State<Register4> {
 
   final ImagePicker picker = ImagePicker();
 
-  Future<void> _pickFrontal() async {
-    final x = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
+  Future<ImageSource?> _elegirFuente() async {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (_) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 6),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(50),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ListTile(
+                  leading: const Icon(Icons.photo_library),
+                  title: const Text('Galería'),
+                  onTap: () => Navigator.pop(context, ImageSource.gallery),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_camera),
+                  title: const Text('Cámara'),
+                  onTap: () => Navigator.pop(context, ImageSource.camera),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
     );
+  }
+
+  Future<void> _pickFrontal() async {
+    final source = await _elegirFuente();
+    if (source == null) return;
+
+    final x = await picker.pickImage(source: source, imageQuality: 85);
     if (x == null) return;
     setState(() => cedulaFrontal = File(x.path));
   }
 
   Future<void> _pickTrasera() async {
-    final x = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-    );
+    final source = await _elegirFuente();
+    if (source == null) return;
+
+    final x = await picker.pickImage(source: source, imageQuality: 85);
     if (x == null) return;
     setState(() => cedulaTrasera = File(x.path));
   }
 
   void subir() {
+    // ✅ Validación pro: decir qué falta exactamente
     if (cedulaFrontal == null || cedulaTrasera == null) {
+      final faltan = <String>[];
+      if (cedulaFrontal == null) faltan.add('frontal');
+      if (cedulaTrasera == null) faltan.add('trasera');
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sube la parte frontal y trasera ✅')),
+        SnackBar(content: Text('Falta subir la parte: ${faltan.join(' y ')}')),
       );
       return;
     }
 
-    // ✅ Aquí luego conectas: subir a storage / backend
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Cédula lista ✅ (solo frontend)')),
     );
 
-    // Ejemplo navegación:
-    // Navigator.pushNamed(context, '/register5');
+    // ✅ navegar a register5
+    Navigator.pushNamed(context, '/register5');
   }
 
   @override
@@ -181,7 +227,6 @@ class _Register4State extends State<Register4> {
 }
 
 // ====== WIDGET CARD ======
-
 class _CedulaCard extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -264,7 +309,6 @@ class _CedulaCard extends StatelessWidget {
               ),
             ),
 
-            // Remove (si ya hay imagen)
             if (file != null)
               IconButton(onPressed: onRemove, icon: const Icon(Icons.close)),
           ],

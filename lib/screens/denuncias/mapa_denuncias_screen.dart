@@ -13,16 +13,13 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
 
   final TextEditingController searchController = TextEditingController();
 
-  // ✅ filtros tipo chip (como tu imagen)
+  int currentIndex = 3;
+
+  // filtros
   String filtro = 'todos';
 
-  // ✅ Centro del mapa (pon cualquier coord por ahora; luego será tu ciudad/ubicación)
-  static const LatLng initialCenter = LatLng(
-    -0.9333,
-    -78.6167,
-  ); // Ejemplo Ecuador
+  static const LatLng initialCenter = LatLng(-0.9333, -78.6167);
 
-  // ✅ Datos dummy (solo frontend)
   final List<_DenunciaMapItem> denuncias = [
     _DenunciaMapItem(
       tipo: 'luz publica',
@@ -71,7 +68,6 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
     super.dispose();
   }
 
-  // ========= Filtrado (solo UI) =========
   List<_DenunciaMapItem> get _filtradas {
     final q = searchController.text.trim().toLowerCase();
 
@@ -84,7 +80,18 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
     }).toList();
   }
 
-  // ========= UI =========
+  void _onBottomNavTap(int index) {
+    setState(() => currentIndex = index);
+
+    // OJO: si estás en la misma ruta, evita push infinito
+    if (index == 0) Navigator.pushNamed(context, '/denuncias');
+    if (index == 1) Navigator.pushNamed(context, '/form/denuncias');
+    if (index == 2) Navigator.pushNamed(context, '/chatbot');
+    if (index == 3) {
+      // ya estás aquí
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = _filtradas;
@@ -92,7 +99,6 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
 
-      // Drawer como tus otras pantallas
       drawer: Drawer(
         child: SafeArea(
           child: Column(
@@ -114,7 +120,6 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
                 title: const Text("Mis denuncias"),
                 onTap: () {
                   Navigator.pop(context);
-                  // Navigator.pushNamed(context, '/denuncias');
                 },
               ),
               const Spacer(),
@@ -152,7 +157,7 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
 
       body: Column(
         children: [
-          // ✅ Buscador (como tu imagen)
+          // Buscador
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
             child: Container(
@@ -173,7 +178,7 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
             ),
           ),
 
-          // ✅ Chips de filtro
+          // Chips
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: SingleChildScrollView(
@@ -194,7 +199,7 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
                   ),
                   _FilterChip(
                     text: 'luz publica',
-                    icon: Icons.person_outline,
+                    icon: Icons.lightbulb_outline,
                     selected: filtro == 'luz publica',
                     onTap: () => setState(() => filtro = 'luz publica'),
                   ),
@@ -227,29 +232,58 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
 
           const SizedBox(height: 10),
 
-          // ✅ Mapa + “mensajes” encima
+          // Mapa + labels
           Expanded(
-            child: Stack(
-              children: [
-                GoogleMap(
-                  initialCameraPosition: const CameraPosition(
-                    target: initialCenter,
-                    zoom: 15,
-                  ),
-                  myLocationEnabled: false,
-                  myLocationButtonEnabled: false,
-                  zoomControlsEnabled: false,
-                  onMapCreated: (c) => mapController = c,
-                  // (Opcional) markers invisibles -> por ahora no los muestro, porque tu mock usa “labels”
-                ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final mapW = constraints.maxWidth;
+                final mapH = constraints.maxHeight;
 
-                // ✅ Labels tipo “mensaje”, NO botones (como tu imagen)
-                ...items.map(
-                  (d) => _DenunciaLabel(item: d, onTap: () => _showDetalle(d)),
-                ),
-              ],
+                return Stack(
+                  children: [
+                    GoogleMap(
+                      initialCameraPosition: const CameraPosition(
+                        target: initialCenter,
+                        zoom: 15,
+                      ),
+                      myLocationEnabled: false,
+                      myLocationButtonEnabled: false,
+                      zoomControlsEnabled: false,
+                      onMapCreated: (c) => mapController = c,
+                    ),
+
+                    // Labels tipo mensaje (clamp para que no se salgan)
+                    for (final d in items)
+                      _DenunciaLabel(
+                        item: d,
+                        maxWidth: mapW,
+                        maxHeight: mapH,
+                        onTap: () => _showDetalle(d),
+                      ),
+                  ],
+                );
+              },
             ),
           ),
+        ],
+      ),
+
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: currentIndex,
+        onTap: _onBottomNavTap,
+        type: BottomNavigationBarType.fixed,
+        showSelectedLabels: false,
+        showUnselectedLabels: false,
+        selectedItemColor: primaryBlue,
+        unselectedItemColor: Colors.grey.shade600,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Inicio"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.format_align_center),
+            label: "denuncias",
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: "chat"),
+          BottomNavigationBarItem(icon: Icon(Icons.map), label: "mapa"),
         ],
       ),
     );
@@ -259,7 +293,7 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('d.tipo.toUpperCase()'),
+        title: Text(d.tipo.toUpperCase()), // ✅ arreglado
         content: Text(
           '${d.descripcion}\nFecha: ${d.fecha}\n\n(Detalle solo UI)',
         ),
@@ -275,7 +309,6 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
 }
 
 // ===================== MODELO UI =====================
-
 class _DenunciaMapItem {
   final String tipo;
   final String descripcion;
@@ -293,7 +326,6 @@ class _DenunciaMapItem {
 }
 
 // ===================== CHIP FILTRO =====================
-
 class _FilterChip extends StatelessWidget {
   final String text;
   final IconData icon;
@@ -319,9 +351,7 @@ class _FilterChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            color: selected
-                ? primaryBlue.withValues(alpha: 0.10)
-                : Colors.white,
+            color: selected ? primaryBlue.withOpacity(0.10) : Colors.white,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: selected ? primaryBlue : Colors.grey.shade300,
@@ -352,35 +382,45 @@ class _FilterChip extends StatelessWidget {
 }
 
 // ===================== LABEL MENSAJE ENCIMA DEL MAPA =====================
-// Nota: Esto es UI “mock”: posiciono las etiquetas con offsets fijos
-// para que se parezca a tu captura.
-// Luego, cuando tengas denuncias reales, las puedes mapear con
-// Marker + InfoWindow / o usar un overlay calculando pixel position.
-
 class _DenunciaLabel extends StatelessWidget {
   final _DenunciaMapItem item;
+  final double maxWidth;
+  final double maxHeight;
   final VoidCallback onTap;
 
-  const _DenunciaLabel({required this.item, required this.onTap});
+  const _DenunciaLabel({
+    required this.item,
+    required this.maxWidth,
+    required this.maxHeight,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // offsets fijos según tipo (solo para parecerse al mock)
-    final pos = _mockOffset(item);
+    // ancho aproximado del label para no salirse
+    const labelW = 120.0;
+    const labelH = 38.0;
+
+    final raw = _mockOffset(item);
+
+    // ✅ clamp: evita que se salga del mapa
+    final left = raw.dx.clamp(8.0, (maxWidth - labelW - 8.0));
+    final top = raw.dy.clamp(8.0, (maxHeight - labelH - 8.0));
 
     return Positioned(
-      left: pos.dx,
-      top: pos.dy,
+      left: left,
+      top: top,
       child: GestureDetector(
         onTap: onTap,
         child: Container(
+          constraints: const BoxConstraints(minWidth: 60, maxWidth: labelW),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
             color: item.highlight ? Colors.black87 : Colors.white,
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.8),
+                color: Colors.black.withOpacity(0.10),
                 blurRadius: 10,
                 offset: const Offset(0, 6),
               ),
@@ -390,7 +430,8 @@ class _DenunciaLabel extends StatelessWidget {
             ),
           ),
           child: Text(
-            item.tipo, // en tu mock se ve solo el texto
+            item.tipo,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: item.highlight ? Colors.white : Colors.black87,
               fontWeight: FontWeight.w600,
@@ -402,7 +443,6 @@ class _DenunciaLabel extends StatelessWidget {
     );
   }
 
-  // Ajusta estos offsets si quieres que quede 100% igual a tu imagen
   Offset _mockOffset(_DenunciaMapItem d) {
     switch (d.tipo) {
       case 'mi denuncia':
