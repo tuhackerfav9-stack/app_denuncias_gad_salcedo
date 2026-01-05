@@ -227,7 +227,7 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
                 title: const Text("Cerrar sesión"),
                 onTap: () {
                   Navigator.pop(context);
-                  Navigator.pushReplacementNamed(context, ' /');
+                  Navigator.pushReplacementNamed(context, '/');
                 },
               ),
               const SizedBox(height: 10),
