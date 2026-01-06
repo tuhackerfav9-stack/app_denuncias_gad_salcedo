@@ -11,13 +11,17 @@ class _RecuperarPasswordState extends State<RecuperarPassword> {
   static const Color primaryBlue = Color(0xFF2C64C4);
 
   final formKey = GlobalKey<FormState>();
+  final cedulaController = TextEditingController();
   final correoController = TextEditingController();
 
   @override
   void dispose() {
+    cedulaController.dispose();
     correoController.dispose();
     super.dispose();
   }
+
+  bool _soloNumeros(String s) => RegExp(r'^\d+$').hasMatch(s);
 
   void enviarCodigo() {
     if (!formKey.currentState!.validate()) return;
@@ -67,6 +71,29 @@ class _RecuperarPasswordState extends State<RecuperarPassword> {
                     ),
                   ),
 
+                  const SizedBox(height: 18),
+
+                  const Text(
+                    'Cédula de identidad',
+                    style: TextStyle(
+                      color: primaryBlue,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: cedulaController,
+                    keyboardType: TextInputType.number,
+                    decoration: _inputDecoration(hint: 'ej.1234567890'),
+                    validator: (v) {
+                      final value = (v ?? '').trim();
+                      if (value.isEmpty) return 'La cédula es requerida';
+                      if (!_soloNumeros(value)) return 'Solo números';
+                      if (value.length != 10) return 'Debe tener 10 dígitos';
+                      return null;
+                    },
+                  ),
                   const SizedBox(height: 18),
 
                   const Text(
