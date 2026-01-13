@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+//import 'package:image_picker/image_picker.dart';
+import '../../settings/session.dart';
 
 class CiudadanoPerfilScreen extends StatefulWidget {
   const CiudadanoPerfilScreen({super.key});
@@ -89,15 +90,15 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
                 passConfirmarController.text.isNotEmpty));
   }
 
-  Future<void> _pickFoto() async {
-    final picker = ImagePicker();
-    final x = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-    );
-    if (x == null) return;
-    setState(() => fotoLocal = File(x.path));
-  }
+  //Future<void> _pickFoto() async {
+  //  final picker = ImagePicker();
+  //  final x = await picker.pickImage(
+  //    source: ImageSource.gallery,
+  //    imageQuality: 85,
+  //  );
+  //  if (x == null) return;
+  //  setState(() => fotoLocal = File(x.path));
+  //}
 
   Future<void> _pickFecha() async {
     final now = DateTime.now();
@@ -184,14 +185,25 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
           child: Column(
             children: [
               const SizedBox(height: 10),
-              const ListTile(
-                leading: CircleAvatar(child: Icon(Icons.person)),
-                title: Text("Ciudadano"),
-                subtitle: Text("usuario@correo.com"),
+              FutureBuilder(
+                future: Future.wait([Session.tipo(), Session.email()]),
+                builder: (context, snap) {
+                  final tipo = snap.data?[0] ?? "Ciudadano";
+                  final email = snap.data?[1] ?? "sin correo";
+
+                  // bonito: primera letra en avatar
+                  final letra = email.isNotEmpty ? email[0].toUpperCase() : "C";
+
+                  return ListTile(
+                    leading: CircleAvatar(child: Text(letra)),
+                    title: Text(tipo == "ciudadano" ? "Ciudadano" : tipo),
+                    subtitle: Text(email),
+                  );
+                },
               ),
               const Divider(),
 
-              // ✅ AYUDA ACTIVO (resaltado)
+              //  AYUDA ACTIVO (resaltado)
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
@@ -225,9 +237,11 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
               ListTile(
                 leading: const Icon(Icons.logout),
                 title: const Text("Cerrar sesión"),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  Navigator.pushReplacementNamed(context, '/');
+                  await Session.clear();
+                  if (!context.mounted) return;
+                  Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
                 },
               ),
               const SizedBox(height: 10),
@@ -248,10 +262,33 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 14),
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.grey.shade300,
-              child: const Icon(Icons.person, size: 18, color: Colors.black54),
+            child: FutureBuilder<String?>(
+              future: Session.email(),
+              builder: (context, snapshot) {
+                // Mientras carga
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.grey,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  );
+                }
+
+                final email = snapshot.data ?? "";
+                final letra = email.isNotEmpty ? email[0].toUpperCase() : "C";
+
+                return CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Colors.grey.shade300,
+                  child: Text(
+                    letra,
+                    style: const TextStyle(
+                      color: Colors.black54,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ],
@@ -263,37 +300,47 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
           key: formKey,
           child: Column(
             children: [
-              // FOTO
+              // AVATAR (inicial del correo)
               Center(
-                child: Column(
-                  children: [
-                    Container(
-                      width: 150,
-                      height: 150,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.grey.shade300,
-                        image: DecorationImage(
-                          image: fotoLocal != null
-                              ? FileImage(fotoLocal!)
-                              : const AssetImage('assets/profile_dummy.png')
-                                    as ImageProvider,
-                          fit: BoxFit.cover,
+                child: FutureBuilder<String?>(
+                  future: Session.email(),
+                  builder: (context, snapshot) {
+                    final email = snapshot.data ?? "";
+                    final letra = email.isNotEmpty
+                        ? email[0].toUpperCase()
+                        : "C";
+
+                    return Column(
+                      children: [
+                        Container(
+                          width: 150,
+                          height: 150,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.grey.shade300,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            letra,
+                            style: const TextStyle(
+                              fontSize: 64,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black54,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: _pickFoto,
-                      child: const Text(
-                        "cambiar foto",
-                        style: TextStyle(
-                          color: primaryBlue,
-                          fontWeight: FontWeight.w600,
+                        const SizedBox(height: 8),
+                        const Text(
+                          "Foto",
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
+                      ],
+                    );
+                  },
                 ),
               ),
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../settings/session.dart';
 
 class MapaDenunciasScreen extends StatefulWidget {
   const MapaDenunciasScreen({super.key});
@@ -104,10 +105,21 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
           child: Column(
             children: [
               const SizedBox(height: 10),
-              const ListTile(
-                leading: CircleAvatar(child: Icon(Icons.person)),
-                title: Text("Ciudadano"),
-                subtitle: Text("usuario@correo.com"),
+              FutureBuilder(
+                future: Future.wait([Session.tipo(), Session.email()]),
+                builder: (context, snap) {
+                  final tipo = snap.data?[0] ?? "Ciudadano";
+                  final email = snap.data?[1] ?? "sin correo";
+
+                  // bonito: primera letra en avatar
+                  final letra = email.isNotEmpty ? email[0].toUpperCase() : "C";
+
+                  return ListTile(
+                    leading: CircleAvatar(child: Text(letra)),
+                    title: Text(tipo == "ciudadano" ? "Ciudadano" : tipo),
+                    subtitle: Text(email),
+                  );
+                },
               ),
               const Divider(),
               ListTile(
@@ -130,9 +142,11 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
               ListTile(
                 leading: const Icon(Icons.logout),
                 title: const Text("Cerrar sesión"),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  Navigator.pushReplacementNamed(context, '/');
+                  await Session.clear();
+                  if (!context.mounted) return;
+                  Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
                 },
               ),
               const SizedBox(height: 10),
@@ -153,10 +167,33 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 14),
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.grey.shade300,
-              child: const Icon(Icons.person, size: 18, color: Colors.black54),
+            child: FutureBuilder<String?>(
+              future: Session.email(),
+              builder: (context, snapshot) {
+                // Mientras carga
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.grey,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  );
+                }
+
+                final email = snapshot.data ?? "";
+                final letra = email.isNotEmpty ? email[0].toUpperCase() : "C";
+
+                return CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Colors.grey.shade300,
+                  child: Text(
+                    letra,
+                    style: const TextStyle(
+                      color: Colors.black54,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ],
@@ -300,7 +337,7 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text(d.tipo.toUpperCase()), // ✅ arreglado
+        title: Text(d.tipo.toUpperCase()), //  arreglado
         content: Text(
           '${d.descripcion}\nFecha: ${d.fecha}\n\n(Detalle solo UI)',
         ),
@@ -412,7 +449,7 @@ class _DenunciaLabel extends StatelessWidget {
 
     final raw = _mockOffset(item);
 
-    // ✅ clamp: evita que se salga del mapa
+    //  clamp: evita que se salga del mapa
     final left = raw.dx.clamp(8.0, (maxWidth - labelW - 8.0));
     final top = raw.dy.clamp(8.0, (maxHeight - labelH - 8.0));
 

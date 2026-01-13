@@ -1,109 +1,151 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'session.dart';
 
 class ApiConnection {
   static final ApiConnection instance = ApiConnection._internal();
   factory ApiConnection() => instance;
   ApiConnection._internal();
 
-  //  CAMBIA la IP segun donde corra API de django
-  final String baseUrl = "http://192.168.100.46:8000";
+  //  CAMBIA SOLO LA IP SI HACE FALTA
+  final String baseUrl = "http://192.168.100.46:8000/";
 
-  String? _access;
-  String? _refresh;
+  // =============================
+  // HEADERS CON TOKEN
+  // =============================
+  Future<Map<String, String>> _headers({bool auth = true}) async {
+    final headers = {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    };
 
-  // ========= AUTH =========
-  Future<void> login(String correo, String password) async {
-    final url = Uri.parse("$baseUrl/api/auth/login/");
+    if (auth) {
+      final token = await Session.access();
+      if (token != null && token.isNotEmpty) {
+        headers["Authorization"] = "Bearer $token";
+      }
+    }
+    return headers;
+  }
+
+  // =============================
+  // REFRESH TOKEN
+  // =============================
+  Future<bool> _refreshToken() async {
+    final refresh = await Session.refresh();
+    if (refresh == null || refresh.isEmpty) return false;
+
+    final url = Uri.parse("${baseUrl}api/auth/refresh/");
     final resp = await http.post(
       url,
       headers: {"Content-Type": "application/json"},
-      body: jsonEncode({"correo": correo, "password": password}),
+      body: jsonEncode({"refresh": refresh}),
     );
 
-    if (resp.statusCode != 200 && resp.statusCode != 201) {
-      throw Exception("Login error: ${resp.body}");
+    if (resp.statusCode == 200) {
+      final data = jsonDecode(resp.body);
+      await Session.updateAccess(data["access"]);
+
+      if (data["refresh"] != null) {
+        await Session.updateRefresh(data["refresh"]);
+      }
+      return true;
     }
 
-    final data = jsonDecode(resp.body);
-    _access = data["access"];
-    _refresh = data["refresh"];
+    return false;
   }
 
-  Future<void> refreshToken() async {
-    if (_refresh == null) throw Exception("No refresh token guardado");
+  // =============================
+  // REQUEST BASE (AUTO REFRESH)
+  // =============================
+  Future<http.Response> _request(Future<http.Response> Function() call) async {
+    http.Response response = await call();
 
-    final url = Uri.parse("$baseUrl/api/auth/refresh/");
-    final resp = await http.post(
-      url,
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({"refresh": _refresh}),
-    );
-
-    if (resp.statusCode != 200 && resp.statusCode != 201) {
-      throw Exception("Refresh error: ${resp.body}");
+    if (response.statusCode == 401) {
+      final refreshed = await _refreshToken();
+      if (refreshed) {
+        response = await call(); // reintento
+      }
     }
 
-    final data = jsonDecode(resp.body);
-    _access = data["access"];
-    if (data["refresh"] != null) _refresh = data["refresh"];
+    return response;
   }
 
-  Map<String, String> _headers({bool auth = false}) {
-    final h = {"Content-Type": "application/json"};
-    if (auth && _access != null) {
-      h["Authorization"] = "Bearer $_access";
-    }
-    return h;
-  }
+  // =============================
+  // GET
+  // =============================
+  Future<dynamic> get(String endpoint, {bool auth = true}) async {
+    final url = Uri.parse("$baseUrl$endpoint");
 
-  // ========= REQUEST WRAPPER =========
-  Future<http.Response> _requestWithAutoRefresh(
-    Future<http.Response> Function() requestFn,
-  ) async {
-    http.Response resp = await requestFn();
-
-    // si expira, refresca y reintenta 1 vez
-    if (resp.statusCode == 401) {
-      await refreshToken();
-      resp = await requestFn();
-    }
-    return resp;
-  }
-
-  // ========= GET =========
-  Future<dynamic> get(String path, {bool auth = false}) async {
-    final url = Uri.parse("$baseUrl$path");
-
-    final resp = await _requestWithAutoRefresh(() {
-      return http.get(url, headers: _headers(auth: auth));
+    final resp = await _request(() async {
+      return await http.get(url, headers: await _headers(auth: auth));
     });
 
     if (resp.statusCode != 200) {
       throw Exception("GET error ${resp.statusCode}: ${resp.body}");
     }
+
     return jsonDecode(resp.body);
   }
 
-  // ========= POST =========
+  // =============================
+  // POST
+  // =============================
   Future<dynamic> post(
-    String path,
-    Map<String, dynamic> body, {
-    bool auth = false,
+    String endpoint,
+    Map<String, dynamic> data, {
+    bool auth = true,
   }) async {
-    final url = Uri.parse("$baseUrl$path");
+    final url = Uri.parse("$baseUrl$endpoint");
 
-    final resp = await _requestWithAutoRefresh(() {
-      return http.post(
+    final resp = await _request(() async {
+      return await http.post(
         url,
-        headers: _headers(auth: auth),
-        body: jsonEncode(body),
+        headers: await _headers(auth: auth),
+        body: jsonEncode(data),
       );
     });
 
     if (resp.statusCode != 200 && resp.statusCode != 201) {
       throw Exception("POST error ${resp.statusCode}: ${resp.body}");
     }
+
     return jsonDecode(resp.body);
+  }
+
+  // =============================
+  // PATCH
+  // =============================
+  Future<dynamic> patch(String endpoint, Map<String, dynamic> data) async {
+    final url = Uri.parse("$baseUrl$endpoint");
+
+    final resp = await _request(() async {
+      return await http.patch(
+        url,
+        headers: await _headers(),
+        body: jsonEncode(data),
+      );
+    });
+
+    if (resp.statusCode != 200) {
+      throw Exception("PATCH error ${resp.statusCode}: ${resp.body}");
+    }
+
+    return jsonDecode(resp.body);
+  }
+
+  // =============================
+  // DELETE
+  // =============================
+  Future<void> delete(String endpoint) async {
+    final url = Uri.parse("$baseUrl$endpoint");
+
+    final resp = await _request(() async {
+      return await http.delete(url, headers: await _headers());
+    });
+
+    if (resp.statusCode != 200 && resp.statusCode != 204) {
+      throw Exception("DELETE error ${resp.statusCode}: ${resp.body}");
+    }
   }
 }

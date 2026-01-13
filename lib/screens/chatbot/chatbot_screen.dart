@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../settings/session.dart';
 
 class ChatbotScreen extends StatefulWidget {
   const ChatbotScreen({super.key});
@@ -173,21 +174,6 @@ class _ChatbotScreenState extends State<ChatbotScreen>
     if (index == 3) Navigator.pushNamed(context, '/mapadenuncias');
   }
 
-  // ================== menú perfil (arriba derecha) ==================
-  void _onProfileMenu(String value) {
-    switch (value) {
-      case 'perfil':
-        Navigator.pushNamed(context, '/perfil');
-        break;
-      case 'ayuda':
-        Navigator.pushNamed(context, '/ayuda');
-        break;
-      case 'cerrar':
-        Navigator.pushReplacementNamed(context, '/');
-        break;
-    }
-  }
-
   // ================== UI ==================
   @override
   Widget build(BuildContext context) {
@@ -200,10 +186,21 @@ class _ChatbotScreenState extends State<ChatbotScreen>
           child: Column(
             children: [
               const SizedBox(height: 10),
-              const ListTile(
-                leading: CircleAvatar(child: Icon(Icons.person)),
-                title: Text("Ciudadano"),
-                subtitle: Text("usuario@correo.com"),
+              FutureBuilder(
+                future: Future.wait([Session.tipo(), Session.email()]),
+                builder: (context, snap) {
+                  final tipo = snap.data?[0] ?? "Ciudadano";
+                  final email = snap.data?[1] ?? "sin correo";
+
+                  // bonito: primera letra en avatar
+                  final letra = email.isNotEmpty ? email[0].toUpperCase() : "C";
+
+                  return ListTile(
+                    leading: CircleAvatar(child: Text(letra)),
+                    title: Text(tipo == "ciudadano" ? "Ciudadano" : tipo),
+                    subtitle: Text(email),
+                  );
+                },
               ),
               const Divider(),
 
@@ -227,9 +224,11 @@ class _ChatbotScreenState extends State<ChatbotScreen>
               ListTile(
                 leading: const Icon(Icons.logout),
                 title: const Text("Cerrar sesión"),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  Navigator.pushReplacementNamed(context, '/');
+                  await Session.clear();
+                  if (!context.mounted) return;
+                  Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
                 },
               ),
               const SizedBox(height: 10),
@@ -249,24 +248,35 @@ class _ChatbotScreenState extends State<ChatbotScreen>
           style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
         ),
         actions: [
-          PopupMenuButton<String>(
-            onSelected: _onProfileMenu,
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'perfil', child: Text("Ver perfil")),
-              PopupMenuItem(value: 'ayuda', child: Text("Ayuda")),
-              PopupMenuItem(value: 'cerrar', child: Text("Cerrar sesión")),
-            ],
-            child: Padding(
-              padding: const EdgeInsets.only(right: 14),
-              child: CircleAvatar(
-                radius: 16,
-                backgroundColor: Colors.grey.shade300,
-                child: const Icon(
-                  Icons.person,
-                  color: Colors.black54,
-                  size: 18,
-                ),
-              ),
+          Padding(
+            padding: const EdgeInsets.only(right: 14),
+            child: FutureBuilder<String?>(
+              future: Session.email(),
+              builder: (context, snapshot) {
+                // Mientras carga
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.grey,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  );
+                }
+
+                final email = snapshot.data ?? "";
+                final letra = email.isNotEmpty ? email[0].toUpperCase() : "C";
+
+                return CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Colors.grey.shade300,
+                  child: Text(
+                    letra,
+                    style: const TextStyle(
+                      color: Colors.black54,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ],

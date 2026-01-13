@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../repositories/login_repository.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -15,6 +16,7 @@ class _LoginState extends State<Login> {
   final passController = TextEditingController();
 
   bool obscurePass = true;
+  bool loading = false;
 
   @override
   void dispose() {
@@ -23,16 +25,32 @@ class _LoginState extends State<Login> {
     super.dispose();
   }
 
-  void _continuar() {
+  Future<void> _continuar() async {
     if (!formKey.currentState!.validate()) return;
 
-    //   Solo frontend: aquí luego conectas supabase o tu backend
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Login válido   (solo frontend)')),
-    );
+    setState(() => loading = true);
 
-    // Ejemplo: ir a denuncias
-    Navigator.pushReplacementNamed(context, '/denuncias');
+    try {
+      final repo = LoginRepository();
+
+      await repo.login(
+        correo: emailController.text,
+        password: passController.text,
+      );
+
+      if (!mounted) return;
+
+      // ✅ Login OK -> ir a denuncias
+      Navigator.pushReplacementNamed(context, '/denuncias');
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
   }
 
   @override
@@ -158,7 +176,7 @@ class _LoginState extends State<Login> {
                   SizedBox(
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: _continuar,
+                      onPressed: loading ? null : _continuar,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryBlue,
                         elevation: 0,
@@ -166,14 +184,20 @@ class _LoginState extends State<Login> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      child: const Text(
-                        'Continuar',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: loading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text(
+                              'Continuar',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                     ),
                   ),
 

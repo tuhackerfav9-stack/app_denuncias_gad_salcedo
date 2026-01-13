@@ -50,6 +50,7 @@ dependencies:
   
   # libreria de http
   http: ^1.6.0
+  shared_preferences: ^2.5.3
 
 
 dev_dependencies:
