@@ -6,7 +6,10 @@
     <application
         android:label="app_movil_denuncias"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true"
+        >
+        
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -30,7 +33,7 @@
         <!--  API KEY: va dentro de <application>, NO dentro de <activity>  ojo api de google maps -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="${MAPS_API_KEY}" />
+            android:value="AIzaSyDFFwwfbAcTQH432AY6w8CwRgwf2VBvWUI" /> 
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

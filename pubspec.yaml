@@ -37,6 +37,7 @@ dependencies:
   supabase_flutter: ^2.10.3 # SDK de Supabase para Flutter
    # Mapa (Google Maps)
   google_maps_flutter: ^2.6.1
+  
 
   # Ubicación en tiempo real
   geolocator: ^12.0.0
@@ -46,6 +47,9 @@ dependencies:
 
   # Firma (dibujar con el dedo)
   signature: ^5.5.0
+  
+  # libreria de http
+  http: ^1.6.0
 
 
 dev_dependencies:

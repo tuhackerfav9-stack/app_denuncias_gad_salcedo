@@ -1,3 +1,4 @@
+import 'package:app_movil_denuncias/screens/chatbot/ChatbotTestScreen.dart';
 import 'package:flutter/material.dart';
 
 import 'screens/autch/cambiar_password.dart';
@@ -25,7 +26,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Denuncias Gad Salcedo',
-      initialRoute: '/',
+      initialRoute: '/chatbottest',
       routes: {
         '/': (context) => const Login(),
         '/register': (context) => const Register(),
@@ -42,6 +43,7 @@ class MyApp extends StatelessWidget {
         '/recuperar_password': (context) => const RecuperarPassword(),
         '/verificar_codigo': (context) => const VerificarCodigo(),
         '/cambiar_password': (context) => const CambiarPassword(),
+        '/chatbottest': (context) => const ChatbotTestScreen(),
       },
     );
   }
