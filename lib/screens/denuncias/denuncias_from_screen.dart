@@ -4,7 +4,9 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:signature/signature.dart';
+
 import '../../settings/session.dart';
+import '../../repositories/denuncias_repository.dart';
 
 class DenunciasFormScreen extends StatefulWidget {
   const DenunciasFormScreen({super.key});
@@ -17,6 +19,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
   static const Color primaryBlue = Color(0xFF2C64C4);
 
   final formKey = GlobalKey<FormState>();
+  bool _enviando = false;
 
   int currentIndex = 1;
 
@@ -52,10 +55,89 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     exportBackgroundColor: Colors.white,
   );
 
+  // ======= MODO EDICIÓN BORRADOR =======
+  bool _modoEditarBorrador = false;
+  String? _borradorId;
+  Map<String, dynamic>? _borradorData;
+  bool _argsCargados = false;
+
   @override
   void initState() {
     super.initState();
     _initUbicacion();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // Cargar args SOLO UNA vez (aquí sí existe context)
+    if (_argsCargados) return;
+    _argsCargados = true;
+
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) {
+      final modo = (args["modo"] ?? "").toString();
+      if (modo == "editar_borrador") {
+        _modoEditarBorrador = true;
+        _borradorId = (args["borrador_id"] ?? "").toString();
+        final data = args["data"];
+        if (data is Map) {
+          _borradorData = Map<String, dynamic>.from(data);
+          _precargarDesdeBorrador(_borradorData!);
+        }
+      }
+    }
+  }
+
+  void _precargarDesdeBorrador(Map<String, dynamic> b) {
+    // Descripción / referencia
+    final desc = (b["descripcion"] ?? "").toString();
+    final ref = (b["referencia"] ?? "").toString();
+    if (desc.isNotEmpty) descripcionController.text = desc;
+    if (ref.isNotEmpty) referenciaController.text = ref;
+
+    // Tipo por id (1..6)
+    final tipoId = b["tipo_denuncia_id"];
+    if (tipoId is int && tipoId >= 1 && tipoId <= tipos.length) {
+      tipoDenuncia = tipos[tipoId - 1];
+    } else if (tipoId is String) {
+      final parsed = int.tryParse(tipoId);
+      if (parsed != null && parsed >= 1 && parsed <= tipos.length) {
+        tipoDenuncia = tipos[parsed - 1];
+      }
+    }
+
+    // Ubicación lat/lng
+    final lat = _toDouble(b["latitud"]);
+    final lng = _toDouble(b["longitud"]);
+    if (lat != null && lng != null) {
+      final p = LatLng(lat, lng);
+      puntoDenuncia = p;
+      markers = {
+        Marker(
+          markerId: const MarkerId('denuncia'),
+          position: p,
+          infoWindow: const InfoWindow(title: 'Lugar de denuncia'),
+        ),
+      };
+
+      // mover cámara si el mapa ya está creado
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        mapController?.animateCamera(CameraUpdate.newLatLngZoom(p, 16));
+        if (mounted) setState(() {});
+      });
+    } else {
+      if (mounted) setState(() {});
+    }
+  }
+
+  double? _toDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is double) return v;
+    if (v is int) return v.toDouble();
+    if (v is String) return double.tryParse(v);
+    return null;
   }
 
   @override
@@ -68,9 +150,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
   Future<void> _initUbicacion() async {
     final ok = await _permisosUbicacion();
-    if (!ok) {
-      return;
-    }
+    if (!ok) return;
 
     final pos = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
@@ -78,14 +158,18 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
     setState(() {
       currentPosition = pos;
-      puntoDenuncia = LatLng(pos.latitude, pos.longitude);
-      markers = {
-        Marker(
-          markerId: const MarkerId('denuncia'),
-          position: puntoDenuncia!,
-          infoWindow: const InfoWindow(title: 'Lugar de denuncia'),
-        ),
-      };
+
+      // Si NO hay punto precargado, usa mi ubicación actual
+      if (puntoDenuncia == null) {
+        puntoDenuncia = LatLng(pos.latitude, pos.longitude);
+        markers = {
+          Marker(
+            markerId: const MarkerId('denuncia'),
+            position: puntoDenuncia!,
+            infoWindow: const InfoWindow(title: 'Lugar de denuncia'),
+          ),
+        };
+      }
     });
   }
 
@@ -134,7 +218,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     });
   }
 
-  void _denunciar() {
+  Future<void> _denunciar() async {
     if (!formKey.currentState!.validate()) return;
 
     if (puntoDenuncia == null) {
@@ -146,7 +230,72 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
       return;
     }
 
-    _snack('Denuncia lista   (solo frontend)');
+    if (_enviando) return;
+
+    // texto -> id (1..6)
+    final idx = tipos.indexOf(tipoDenuncia ?? "");
+    if (idx == -1) {
+      _snack("Tipo de denuncia inválido");
+      return;
+    }
+    final tipoId = idx + 1;
+
+    final lat = puntoDenuncia!.latitude;
+    final lng = puntoDenuncia!.longitude;
+
+    setState(() => _enviando = true);
+
+    try {
+      final repo = DenunciasRepository();
+
+      if (_modoEditarBorrador) {
+        final id = _borradorId;
+        if (id == null || id.isEmpty) {
+          _snack("❌ No llegó borrador_id para editar");
+          return;
+        }
+
+        // PUT /api/denuncias/borradores/<id>/
+        final res = await repo.actualizarBorrador(
+          borradorId: id,
+          tipoDenunciaId: tipoId,
+          descripcion: descripcionController.text.trim(),
+          latitud: lat,
+          longitud: lng,
+          referencia: referenciaController.text.trim(),
+          // direccionTexto: null,
+        );
+
+        final expSeg =
+            (res["expira_en_seg"] ?? _borradorData?["expira_en_seg"] ?? 0);
+        _snack("✅ Cambios guardados. Expira en $expSeg seg.");
+
+        if (!mounted) return;
+        Navigator.pushNamedAndRemoveUntil(context, '/denuncias', (r) => false);
+      } else {
+        // POST /api/denuncias/borradores/
+        final res = await repo.crearBorrador(
+          tipoDenunciaId: tipoId,
+          descripcion: descripcionController.text.trim(),
+          latitud: lat,
+          longitud: lng,
+          referencia: referenciaController.text.trim(),
+          origen: "formulario",
+        );
+
+        final borradorId = (res["borrador_id"] ?? res["id"] ?? "").toString();
+        final expSeg = (res["expira_en_seg"] ?? 0);
+
+        _snack("✅ Borrador creado ($borradorId). Expira en $expSeg seg.");
+
+        if (!mounted) return;
+        Navigator.pushNamedAndRemoveUntil(context, '/denuncias', (r) => false);
+      }
+    } catch (e) {
+      _snack("❌ Error: $e");
+    } finally {
+      if (mounted) setState(() => _enviando = false);
+    }
   }
 
   void _abrirChatbot() {
@@ -158,11 +307,10 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  //  Navegación inferior
+  // Navegación inferior (NO TOCAR)
   void _onBottomNavTap(int index) {
     setState(() => currentIndex = index);
 
-    // Aquí conectas tus rutas reales:
     if (index == 0) Navigator.pushNamed(context, '/denuncias');
     if (index == 1) Navigator.pushNamed(context, '/form/denuncias');
     if (index == 2) Navigator.pushNamed(context, '/chatbot');
@@ -174,7 +322,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     final pos = currentPosition;
 
     return Scaffold(
-      // Drawer (menú lateral)
+      // Drawer (NO TOCAR)
       drawer: Drawer(
         child: SafeArea(
           child: Column(
@@ -185,8 +333,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                 builder: (context, snap) {
                   final tipo = snap.data?[0] ?? "Ciudadano";
                   final email = snap.data?[1] ?? "sin correo";
-
-                  // bonito: primera letra en avatar
                   final letra = email.isNotEmpty ? email[0].toUpperCase() : "C";
 
                   return ListTile(
@@ -197,7 +343,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                 },
               ),
               const Divider(),
-
               ListTile(
                 leading: const Icon(Icons.person_outline),
                 title: const Text("Perfil"),
@@ -231,7 +376,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         ),
       ),
 
-      // AppBar superior
+      // AppBar (NO TOCAR)
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -241,15 +386,12 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
           "Denuncias",
           style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
         ),
-
-        // Avatar
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 14),
             child: FutureBuilder<String?>(
               future: Session.email(),
               builder: (context, snapshot) {
-                // Mientras carga
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const CircleAvatar(
                     radius: 16,
@@ -277,6 +419,8 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
           ),
         ],
       ),
+
+      // BODY (validaciones intactas)
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Form(
@@ -297,7 +441,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                     : null,
                 decoration: InputDecoration(
                   hintText: 'seleccione el tipo de denuncia',
-
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
                   ),
@@ -315,11 +458,9 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                   if (v == null || v.trim().isEmpty) {
                     return 'La descripción es requerida';
                   }
-
                   if (v.trim().length < 10) {
                     return 'Describe un poco más (mín. 10 caracteres)';
                   }
-
                   return null;
                 },
                 decoration: InputDecoration(
@@ -346,13 +487,23 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : GoogleMap(
                         initialCameraPosition: CameraPosition(
-                          target: LatLng(pos.latitude, pos.longitude),
+                          target:
+                              puntoDenuncia ??
+                              LatLng(pos.latitude, pos.longitude),
                           zoom: 16,
                         ),
                         myLocationEnabled: true,
                         myLocationButtonEnabled: false,
                         markers: markers,
-                        onMapCreated: (c) => mapController = c,
+                        onMapCreated: (c) {
+                          mapController = c;
+                          // Si venimos editando y ya hay punto, centra
+                          if (puntoDenuncia != null) {
+                            c.animateCamera(
+                              CameraUpdate.newLatLngZoom(puntoDenuncia!, 16),
+                            );
+                          }
+                        },
                         onTap: (latLng) {
                           setState(() {
                             puntoDenuncia = latLng;
@@ -479,19 +630,22 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
               const SizedBox(height: 15),
 
-              // Denunciar
+              // Denunciar / Guardar
               SizedBox(
                 width: double.infinity,
                 height: 48,
                 child: TextButton(
-                  onPressed: _denunciar,
+                  onPressed: _enviando ? null : _denunciar,
                   style: TextButton.styleFrom(
                     backgroundColor: primaryBlue,
                     foregroundColor: Colors.white,
                   ),
-                  child: const Text(
-                    'Denunciar',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  child: Text(
+                    _modoEditarBorrador ? 'Guardar cambios' : 'Denunciar',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
@@ -500,7 +654,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         ),
       ),
 
-      // FAB Robot  para chatbot
+      // FAB chatbot (NO TOCAR)
       floatingActionButton: FloatingActionButton(
         backgroundColor: primaryBlue,
         shape: const CircleBorder(),
@@ -508,6 +662,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         child: const Icon(Icons.smart_toy, color: Colors.white),
       ),
 
+      // Bottom nav (NO TOCAR)
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
         onTap: _onBottomNavTap,
@@ -521,7 +676,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.format_align_center),
             label: "denuncias",
-          ), // este queda activo
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: "chat"),
           BottomNavigationBarItem(icon: Icon(Icons.map), label: "mapa"),
         ],

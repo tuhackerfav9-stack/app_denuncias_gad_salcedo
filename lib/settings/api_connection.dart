@@ -148,4 +148,29 @@ class ApiConnection {
       throw Exception("DELETE error ${resp.statusCode}: ${resp.body}");
     }
   }
+
+  // =============================
+  // put actualuzar
+  // =============================
+  Future<dynamic> put(
+    String endpoint,
+    Map<String, dynamic> data, {
+    bool auth = true,
+  }) async {
+    final url = Uri.parse("$baseUrl$endpoint");
+
+    final resp = await _request(() async {
+      return await http.put(
+        url,
+        headers: await _headers(auth: auth),
+        body: jsonEncode(data),
+      );
+    });
+
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception("PUT error ${resp.statusCode}: ${resp.body}");
+    }
+
+    return jsonDecode(resp.body);
+  }
 }

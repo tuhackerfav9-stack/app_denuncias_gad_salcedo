@@ -13,6 +13,7 @@ import 'screens/ayuda/ayuda_screen.dart';
 import 'screens/chatbot/chatbot_screen.dart';
 import 'screens/denuncias/denuncias_from_screen.dart';
 import 'screens/denuncias/denuncias_screen.dart';
+import 'screens/denuncias/detalle_denuncia_screen.dart';
 import 'screens/denuncias/mapa_denuncias_screen.dart';
 import 'screens/perfil/ciudadano_perfil_screen.dart';
 import 'settings/session_guard.dart';
@@ -52,6 +53,8 @@ class MyApp extends StatelessWidget {
         '/recuperar_password': (context) => const RecuperarPassword(),
         '/verificar_codigo': (context) => const VerificarCodigo(),
         '/cambiar_password': (context) => const CambiarPassword(),
+        '/detalle_denuncia': (context) =>
+            SessionGuard(child: const DetalleDenunciaScreen()),
       },
     );
   }
