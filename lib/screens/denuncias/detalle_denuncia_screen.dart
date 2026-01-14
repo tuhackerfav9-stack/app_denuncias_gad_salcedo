@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../settings/session.dart';
 
 class DetalleDenunciaScreen extends StatefulWidget {
@@ -28,41 +29,44 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
   // Helpers para leer campos desde DenunciaModel o Map
   dynamic _get(dynamic obj, String field) {
     try {
-      // Map
       if (obj is Map) return obj[field];
-
-      // DenunciaModel u otro objeto con getters
       final dyn = obj as dynamic;
-      return dyn?.toJson != null ? dyn.toJson()[field] : dyn?.$field;
-    } catch (_) {
+
+      // Si tu modelo tuviera toMap/toJson
       try {
-        final dyn = obj as dynamic;
-        // intenta por getter conocido
-        switch (field) {
-          case "id":
-            return dyn.id;
-          case "estado":
-            return dyn.estado;
-          case "descripcion":
-            return dyn.descripcion;
-          case "referencia":
-            return dyn.referencia;
-          case "latitud":
-            return dyn.latitud;
-          case "longitud":
-            return dyn.longitud;
-          case "tipo_denuncia_id":
-            return dyn.tipoDenunciaId;
-          case "tipo_denuncia_nombre":
-            return dyn.tipoDenunciaNombre;
-          case "fecha_creacion":
-            return dyn.fechaCreacion;
-          default:
-            return null;
-        }
-      } catch (_) {
-        return null;
+        final m = dyn.toMap();
+        if (m is Map) return m[field];
+      } catch (_) {}
+      try {
+        final m = dyn.toJson();
+        if (m is Map) return m[field];
+      } catch (_) {}
+
+      // fallback manual por getters comunes
+      switch (field) {
+        case "id":
+          return dyn.id;
+        case "estado":
+          return dyn.estado;
+        case "descripcion":
+          return dyn.descripcion;
+        case "referencia":
+          return dyn.referencia;
+        case "latitud":
+          return dyn.latitud;
+        case "longitud":
+          return dyn.longitud;
+        case "tipo_denuncia_id":
+          return dyn.tipoDenunciaId;
+        case "tipo_denuncia_nombre":
+          return dyn.tipoDenunciaNombre;
+        case "fecha_creacion":
+          return dyn.fechaCreacion;
+        default:
+          return null;
       }
+    } catch (_) {
+      return null;
     }
   }
 
@@ -90,6 +94,93 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
       return Colors.red;
     }
     return Colors.grey;
+  }
+
+  // =========================
+  // EXTRA: extraer firma/evidencias robusto
+  // =========================
+  String? _extraerFirmaUrl(dynamic args) {
+    // directo
+    final direct = _get(args, "firma_url") ?? _get(args, "firmaUrl");
+    if (direct != null && direct.toString().trim().isNotEmpty) {
+      return direct.toString().trim();
+    }
+
+    // firma anidada: firma: { firma_url: ... }
+    final firmaObj = _get(args, "firma");
+    if (firmaObj is Map) {
+      final u =
+          firmaObj["firma_url"] ?? firmaObj["url"] ?? firmaObj["url_firma"];
+      if (u != null && u.toString().trim().isNotEmpty)
+        return u.toString().trim();
+    }
+
+    // si viene lista firmas: firmas: [{firma_url: ...}]
+    final firmas = _get(args, "firmas");
+    if (firmas is List && firmas.isNotEmpty) {
+      final first = firmas.first;
+      if (first is Map) {
+        final u = first["firma_url"] ?? first["url"] ?? first["url_firma"];
+        if (u != null && u.toString().trim().isNotEmpty)
+          return u.toString().trim();
+      }
+    }
+
+    return null;
+  }
+
+  List<Map<String, dynamic>> _extraerEvidencias(dynamic args) {
+    // evidencias puede venir:
+    // evidencias: [{tipo,url_archivo,nombre_archivo}]
+    // o evidencia: [...]
+    // o media: [...]
+    final raw =
+        _get(args, "evidencias") ??
+        _get(args, "evidencia") ??
+        _get(args, "media");
+
+    if (raw is List) {
+      return raw
+          .map((e) {
+            if (e is Map) return Map<String, dynamic>.from(e);
+            return <String, dynamic>{};
+          })
+          .where((m) => m.isNotEmpty)
+          .toList();
+    }
+
+    // algunos backends devuelven "results"
+    if (raw is Map && raw["results"] is List) {
+      final list = raw["results"] as List;
+      return list
+          .map(
+            (e) =>
+                e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{},
+          )
+          .where((m) => m.isNotEmpty)
+          .toList();
+    }
+
+    return [];
+  }
+
+  void _verImagenFull(String url) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.all(14),
+        child: InteractiveViewer(
+          child: Image.network(
+            url,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Padding(
+              padding: EdgeInsets.all(20),
+              child: Text("No se pudo cargar la imagen."),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -133,6 +224,16 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
 
     final lat = _toDouble(_get(args, "latitud"));
     final lng = _toDouble(_get(args, "longitud"));
+
+    final firmaUrl = _extraerFirmaUrl(args);
+    final evidencias = _extraerEvidencias(args);
+
+    final hasCoords = lat != null && lng != null;
+
+    final LatLng? punto = hasCoords ? LatLng(lat!, lng!) : null;
+    final markers = <Marker>{
+      if (punto != null) Marker(markerId: const MarkerId("p"), position: punto),
+    };
 
     return Scaffold(
       // Drawer (MISMO estilo)
@@ -233,6 +334,7 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
         ],
       ),
 
+      // ✅ BODY PRO
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -317,43 +419,237 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
 
             const SizedBox(height: 14),
 
-            // Acciones
+            // MAPA
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.grey.shade300),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Ubicación en el mapa",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: primaryBlue,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      height: 180,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: !hasCoords
+                          ? const Center(child: Text("No hay coordenadas."))
+                          : GoogleMap(
+                              initialCameraPosition: CameraPosition(
+                                target: punto!,
+                                zoom: 16,
+                              ),
+                              markers: markers,
+                              zoomControlsEnabled: false,
+                              myLocationButtonEnabled: false,
+                              rotateGesturesEnabled: false,
+                              scrollGesturesEnabled: false,
+                              tiltGesturesEnabled: false,
+                              zoomGesturesEnabled: false,
+                            ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: !hasCoords
+                            ? null
+                            : () {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/mapadenuncias',
+                                  arguments: {"lat": lat, "lng": lng},
+                                );
+                              },
+                        icon: const Icon(Icons.map),
+                        label: const Text("Abrir en mapa"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryBlue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // EVIDENCIAS
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.grey.shade300),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Evidencias",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: primaryBlue,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (evidencias.isEmpty)
+                      const Text("No hay evidencias adjuntas.")
+                    else
+                      SizedBox(
+                        height: 92,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: evidencias.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: 10),
+                          itemBuilder: (_, i) {
+                            final ev = evidencias[i];
+                            final tipo = (ev["tipo"] ?? "")
+                                .toString()
+                                .toLowerCase();
+                            final url = (ev["url_archivo"] ?? ev["url"] ?? "")
+                                .toString();
+
+                            final isVideo =
+                                tipo.contains("video") ||
+                                url.toLowerCase().contains(".mp4");
+
+                            if (url.trim().isEmpty) {
+                              return _miniBox(
+                                child: const Center(child: Text("Sin URL")),
+                              );
+                            }
+
+                            if (isVideo) {
+                              return _miniBox(
+                                onTap: () => _snack(
+                                  "Video: abre el link en un visor (si quieres lo implemento)",
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: const [
+                                    Icon(Icons.videocam, size: 28),
+                                    SizedBox(height: 6),
+                                    Text(
+                                      "Video",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+
+                            // Imagen
+                            return _miniBox(
+                              onTap: () => _verImagenFull(url),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.network(
+                                  url,
+                                  width: 120,
+                                  height: 92,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(10),
+                                      child: Text("No carga"),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // FIRMA
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.grey.shade300),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Firma",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: primaryBlue,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (firmaUrl == null || firmaUrl.trim().isEmpty)
+                      const Text("No hay firma registrada.")
+                    else
+                      GestureDetector(
+                        onTap: () => _verImagenFull(firmaUrl),
+                        child: Container(
+                          height: 120,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Image.network(
+                            firmaUrl,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Center(
+                              child: Text("No se pudo cargar la firma."),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // Acciones estilo mock (opcional)
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    icon: const Icon(Icons.close),
-                    label: const Text("Cerrar"),
+                    onPressed: () => _snack("Luego: descargar PDF"),
+                    icon: const Icon(Icons.favorite_border),
+                    label: const Text("Descargar pdf"),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.black87,
-                      side: BorderSide(color: Colors.grey.shade400),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: (lat == null || lng == null)
-                        ? null
-                        : () {
-                            Navigator.pushNamed(
-                              context,
-                              '/mapadenuncias',
-                              arguments: {"lat": lat, "lng": lng},
-                            );
-                          },
-                    icon: const Icon(Icons.map),
-                    label: const Text("Ver mapa"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryBlue,
-                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -410,6 +706,23 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
             child: Text(value, style: const TextStyle(color: Colors.black54)),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _miniBox({required Widget child, VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: 120,
+        height: 92,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.grey.shade300),
+          color: Colors.white,
+        ),
+        child: child,
       ),
     );
   }

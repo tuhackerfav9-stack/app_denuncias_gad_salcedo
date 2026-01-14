@@ -55,6 +55,8 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     exportBackgroundColor: Colors.white,
   );
 
+  bool _firmaInteractuada = false;
+
   // ======= MODO EDICIÓN BORRADOR =======
   bool _modoEditarBorrador = false;
   String? _borradorId;
@@ -71,7 +73,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    // Cargar args SOLO UNA vez (aquí sí existe context)
     if (_argsCargados) return;
     _argsCargados = true;
 
@@ -91,13 +92,11 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
   }
 
   void _precargarDesdeBorrador(Map<String, dynamic> b) {
-    // Descripción / referencia
     final desc = (b["descripcion"] ?? "").toString();
     final ref = (b["referencia"] ?? "").toString();
     if (desc.isNotEmpty) descripcionController.text = desc;
     if (ref.isNotEmpty) referenciaController.text = ref;
 
-    // Tipo por id (1..6)
     final tipoId = b["tipo_denuncia_id"];
     if (tipoId is int && tipoId >= 1 && tipoId <= tipos.length) {
       tipoDenuncia = tipos[tipoId - 1];
@@ -108,7 +107,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
       }
     }
 
-    // Ubicación lat/lng
     final lat = _toDouble(b["latitud"]);
     final lng = _toDouble(b["longitud"]);
     if (lat != null && lng != null) {
@@ -122,7 +120,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         ),
       };
 
-      // mover cámara si el mapa ya está creado
       WidgetsBinding.instance.addPostFrameCallback((_) {
         mapController?.animateCamera(CameraUpdate.newLatLngZoom(p, 16));
         if (mounted) setState(() {});
@@ -159,7 +156,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     setState(() {
       currentPosition = pos;
 
-      // Si NO hay punto precargado, usa mi ubicación actual
       if (puntoDenuncia == null) {
         puntoDenuncia = LatLng(pos.latitude, pos.longitude);
         markers = {
@@ -218,6 +214,32 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     });
   }
 
+  bool _firmaValida() {
+    final pts = signatureController.points;
+    return _firmaInteractuada && pts.isNotEmpty && pts.length >= 2;
+  }
+
+  // ✅ NUEVO: obtener bytes de firma y lanzar error si no se puede
+  Future<List<int>> _obtenerFirmaBytesObligatoria() async {
+    if (!_firmaValida()) {
+      throw Exception("Firma obligatoria: no se detectó firma válida.");
+    }
+
+    await Future.delayed(const Duration(milliseconds: 80));
+
+    final pts = signatureController.points;
+    if (pts.isEmpty || pts.length < 2) {
+      throw Exception("Firma obligatoria: no se capturaron trazos.");
+    }
+
+    final png = await signatureController.toPngBytes();
+    if (png == null || png.isEmpty) {
+      throw Exception("Firma obligatoria: no se pudo generar PNG.");
+    }
+
+    return png;
+  }
+
   Future<void> _denunciar() async {
     if (!formKey.currentState!.validate()) return;
 
@@ -225,14 +247,15 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
       _snack('Selecciona el lugar de la denuncia en el mapa');
       return;
     }
-    if (signatureController.isEmpty) {
+
+    // Aquí hacemos la firma OBLIGATORIA antes de guardar nada
+    if (!_firmaValida()) {
       _snack('Firma antes de enviar');
       return;
     }
 
     if (_enviando) return;
 
-    // texto -> id (1..6)
     final idx = tipos.indexOf(tipoDenuncia ?? "");
     if (idx == -1) {
       _snack("Tipo de denuncia inválido");
@@ -245,35 +268,32 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
     setState(() => _enviando = true);
 
-    try {
-      final repo = DenunciasRepository();
+    final repo = DenunciasRepository();
+    String borradorIdFinal = "";
+    bool borradorCreadoEnEsteEnvio = false;
 
+    try {
+      //  1) Generar bytes de firma (obligatorio) antes de tocar backend
+      final firmaBytes = await _obtenerFirmaBytesObligatoria();
+
+      //  2) Crear/Actualizar borrador
       if (_modoEditarBorrador) {
         final id = _borradorId;
         if (id == null || id.isEmpty) {
-          _snack("❌ No llegó borrador_id para editar");
-          return;
+          throw Exception("No llegó borrador_id para editar");
         }
 
-        // PUT /api/denuncias/borradores/<id>/
-        final res = await repo.actualizarBorrador(
+        await repo.actualizarBorrador(
           borradorId: id,
           tipoDenunciaId: tipoId,
           descripcion: descripcionController.text.trim(),
           latitud: lat,
           longitud: lng,
           referencia: referenciaController.text.trim(),
-          // direccionTexto: null,
         );
-
-        final expSeg =
-            (res["expira_en_seg"] ?? _borradorData?["expira_en_seg"] ?? 0);
-        _snack("✅ Cambios guardados. Expira en $expSeg seg.");
-
-        if (!mounted) return;
-        Navigator.pushNamedAndRemoveUntil(context, '/denuncias', (r) => false);
+        borradorIdFinal = id;
+        // no lo marcamos como creado aquí (ya existía)
       } else {
-        // POST /api/denuncias/borradores/
         final res = await repo.crearBorrador(
           tipoDenunciaId: tipoId,
           descripcion: descripcionController.text.trim(),
@@ -283,15 +303,47 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
           origen: "formulario",
         );
 
-        final borradorId = (res["borrador_id"] ?? res["id"] ?? "").toString();
-        final expSeg = (res["expira_en_seg"] ?? 0);
-
-        _snack("✅ Borrador creado ($borradorId). Expira en $expSeg seg.");
-
-        if (!mounted) return;
-        Navigator.pushNamedAndRemoveUntil(context, '/denuncias', (r) => false);
+        borradorIdFinal = (res["borrador_id"] ?? "").toString();
+        if (borradorIdFinal.isEmpty) {
+          throw Exception("No llegó borrador_id del backend");
+        }
+        borradorCreadoEnEsteEnvio = true;
       }
+
+      //  3) Subir evidencia (si hay)
+      if (mediaFile != null) {
+        final tipo = mediaEsVideo ? "video" : "foto";
+        await repo.subirEvidenciaBorrador(
+          borradorId: borradorIdFinal,
+          archivo: mediaFile!,
+          tipo: tipo,
+        );
+      }
+
+      //  4) Subir firma (OBLIGATORIA, si falla -> catch)
+      await repo.subirFirmaBorrador(
+        borradorId: borradorIdFinal,
+        pngBytes: firmaBytes,
+      );
+
+      //  5) Finalizar (esto es lo que lo convierte en denuncia real)
+      //await repo.finalizarBorrador(borradorIdFinal);
+
+      _snack(" Denuncia enviada correctamente.");
+
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/denuncias', (r) => false);
     } catch (e) {
+      //  ROLLBACK: si el borrador se creó en este envío y algo falló (firma/evidencia/finalizar),
+      // lo eliminamos para que NO quede guardado nada.
+      if (borradorCreadoEnEsteEnvio && borradorIdFinal.isNotEmpty) {
+        try {
+          await repo.eliminarBorrador(borradorIdFinal);
+        } catch (_) {
+          // si falla el rollback, igual mostramos el error principal
+        }
+      }
+
       _snack("❌ Error: $e");
     } finally {
       if (mounted) setState(() => _enviando = false);
@@ -427,7 +479,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
           key: formKey,
           child: Column(
             children: [
-              // Tipo
               _label('Tipo de denuncia'),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
@@ -449,7 +500,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
               const SizedBox(height: 15),
 
-              // Descripción
               _label('Descripcion'),
               const SizedBox(height: 8),
               TextFormField(
@@ -473,7 +523,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
               const SizedBox(height: 15),
 
-              // Mapa
               _label('Mapa'),
               const SizedBox(height: 8),
               Container(
@@ -497,7 +546,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                         markers: markers,
                         onMapCreated: (c) {
                           mapController = c;
-                          // Si venimos editando y ya hay punto, centra
                           if (puntoDenuncia != null) {
                             c.animateCamera(
                               CameraUpdate.newLatLngZoom(puntoDenuncia!, 16),
@@ -523,7 +571,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
               const SizedBox(height: 15),
 
-              // Media
               _label('Subir Foto o video'),
               const SizedBox(height: 8),
               Row(
@@ -586,7 +633,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
               const SizedBox(height: 15),
 
-              // Referencia
               _label('Referencia del lugar'),
               const SizedBox(height: 8),
               TextFormField(
@@ -604,7 +650,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
               const SizedBox(height: 15),
 
-              // Firma
               _label('Firma'),
               const SizedBox(height: 8),
               Container(
@@ -614,23 +659,37 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                   border: Border.all(color: Colors.grey.shade300),
                 ),
                 clipBehavior: Clip.antiAlias,
-                child: Signature(
-                  controller: signatureController,
-                  backgroundColor: Colors.white,
+                child: Listener(
+                  onPointerDown: (_) {
+                    if (!_firmaInteractuada) {
+                      setState(() => _firmaInteractuada = true);
+                    }
+                  },
+                  onPointerMove: (_) {
+                    if (!_firmaInteractuada) {
+                      setState(() => _firmaInteractuada = true);
+                    }
+                  },
+                  child: Signature(
+                    controller: signatureController,
+                    backgroundColor: Colors.white,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: () => signatureController.clear(),
+                  onPressed: () {
+                    signatureController.clear();
+                    setState(() => _firmaInteractuada = false);
+                  },
                   child: const Text('Limpiar firma'),
                 ),
               ),
 
               const SizedBox(height: 15),
 
-              // Denunciar / Guardar
               SizedBox(
                 width: double.infinity,
                 height: 48,
@@ -654,7 +713,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         ),
       ),
 
-      // FAB chatbot (NO TOCAR)
       floatingActionButton: FloatingActionButton(
         backgroundColor: primaryBlue,
         shape: const CircleBorder(),
@@ -662,7 +720,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         child: const Icon(Icons.smart_toy, color: Colors.white),
       ),
 
-      // Bottom nav (NO TOCAR)
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
         onTap: _onBottomNavTap,
