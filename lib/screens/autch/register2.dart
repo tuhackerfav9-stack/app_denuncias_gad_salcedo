@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../repositories/register_repository.dart';
 
 class Register2 extends StatefulWidget {
   const Register2({super.key});
@@ -22,30 +23,73 @@ class _Register2State extends State<Register2> {
   Future<void> verificarCorreo() async {
     if (!formKey.currentState!.validate()) return;
 
-    //   Solo frontend: simular envío
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Código enviado  (solo frontend)')),
-    );
+    // leer args
+    final args =
+        (ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?) ??
+        {};
+    final uid = (args['uid'] ?? '').toString();
 
-    final ok = await _mostrarDialogOTP();
+    if (uid.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('❌ No llegó el UID del registro')),
+      );
+      return;
+    }
 
-    if (ok == true && mounted) {
-      Navigator.pushNamed(context, '/register3');
+    final repo = RegisterRepository();
+
+    try {
+      // 1) enviar código
+      final resp = await repo.enviarCodigo(
+        uid: uid,
+        correo: correoController.text,
+      );
+
+      // En DEV tu backend devuelve dev_codigo (solo para pruebas)
+      final devCodigo = (resp['dev_codigo'] ?? '').toString();
+      if (devCodigo.isNotEmpty) {
+        // opcional: mostrarlo para pruebas rápidas
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('✅ Código enviado (DEV): $devCodigo')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ Código enviado al correo')),
+        );
+      }
+
+      // 2) abrir modal y obtener código escrito
+      final codigoIngresado =
+          await _mostrarDialogOTP(); // ahora devuelve String?
+
+      if (codigoIngresado == null) return; // canceló
+
+      // 3) verificar código en backend
+      await repo.verificarCodigo(uid: uid, codigo6: codigoIngresado);
+
+      if (!mounted) return;
+
+      // 4) pasar a register3 con uid
+      Navigator.pushNamed(context, '/register3', arguments: {'uid': uid});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('❌ Error: $e')));
     }
   }
 
-  Future<bool?> _mostrarDialogOTP() async {
+  Future<String?> _mostrarDialogOTP() async {
     final controllers = List.generate(6, (_) => TextEditingController());
     final focusNodes = List.generate(6, (_) => FocusNode());
 
     String getCodigo() => controllers.map((c) => c.text.trim()).join();
 
-    bool? result = await showDialog<bool>(
+    String? result = await showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
         void onChanged(int index, String value) {
-          // Solo 1 dígito
           if (value.length > 1) {
             controllers[index].text = value.substring(value.length - 1);
             controllers[index].selection = const TextSelection.collapsed(
@@ -53,7 +97,6 @@ class _Register2State extends State<Register2> {
             );
           }
 
-          // Avanza al siguiente
           if (controllers[index].text.isNotEmpty && index < 5) {
             focusNodes[index + 1].requestFocus();
           }
@@ -68,7 +111,7 @@ class _Register2State extends State<Register2> {
             return;
           }
 
-          Navigator.pop(ctx, true);
+          Navigator.pop(ctx, code); // ✅ devolvemos el código
         }
 
         return AlertDialog(
@@ -99,7 +142,6 @@ class _Register2State extends State<Register2> {
                   ),
                 ),
                 const SizedBox(height: 10),
-
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: List.generate(6, (i) {
@@ -135,9 +177,7 @@ class _Register2State extends State<Register2> {
                     );
                   }),
                 ),
-
                 const SizedBox(height: 16),
-
                 SizedBox(
                   height: 44,
                   child: TextButton(
@@ -160,7 +200,7 @@ class _Register2State extends State<Register2> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
+              onPressed: () => Navigator.pop(ctx, null), // ✅ cancel
               child: const Text('Cancelar'),
             ),
           ],
@@ -168,7 +208,6 @@ class _Register2State extends State<Register2> {
       },
     );
 
-    //   limpiar memoria
     for (final c in controllers) {
       c.dispose();
     }

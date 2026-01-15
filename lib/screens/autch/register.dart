@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../repositories/register_repository.dart';
 
 class Register extends StatefulWidget {
   const Register({super.key});
@@ -28,26 +29,44 @@ class _RegisterState extends State<Register> {
 
   bool _soloNumeros(String s) => RegExp(r'^\d+$').hasMatch(s);
 
-  void continuar() {
+  Future<void> continuar() async {
     if (!formKey.currentState!.validate()) return;
 
-    //   Solo frontend: confirmación
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Datos válidos   (solo frontend)')),
-    );
+    final repo = RegisterRepository();
 
-    //   Siguiente pantalla
-    Navigator.pushNamed(
-      context,
-      '/register2',
-      // opcional: mandar los datos a la siguiente pantalla
-      arguments: {
-        'cedula': cedulaController.text.trim(),
-        'nombres': nombresController.text.trim(),
-        'apellidos': apellidosController.text.trim(),
-        'telefono': telefonoController.text.trim(),
-      },
-    );
+    try {
+      // loading simple (sin cambiar tu estilo)
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Guardando datos...')));
+
+      final uid = await repo.paso1(
+        cedula: cedulaController.text,
+        nombres: nombresController.text,
+        apellidos: apellidosController.text,
+        telefono: telefonoController.text,
+      );
+
+      if (!mounted) return;
+
+      // Siguiente pantalla: mandamos UID y (si quieres) los datos
+      Navigator.pushNamed(
+        context,
+        '/register2',
+        arguments: {
+          'uid': uid,
+          'cedula': cedulaController.text.trim(),
+          'nombres': nombresController.text.trim(),
+          'apellidos': apellidosController.text.trim(),
+          'telefono': telefonoController.text.trim(),
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('❌ Error: $e')));
+    }
   }
 
   @override

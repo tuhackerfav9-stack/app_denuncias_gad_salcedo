@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../repositories/register_repository.dart';
 
 class Register3 extends StatefulWidget {
   const Register3({super.key});
@@ -15,6 +16,8 @@ class _Register3State extends State<Register3> {
   final ddController = TextEditingController();
   final mmController = TextEditingController();
   final yyyyController = TextEditingController();
+
+  bool loading = false;
 
   @override
   void dispose() {
@@ -33,7 +36,9 @@ class _Register3State extends State<Register3> {
     }
   }
 
-  void continuar() {
+  String _two(int n) => n.toString().padLeft(2, '0');
+
+  Future<void> continuar() async {
     final ok = formKey.currentState!.validate();
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -53,16 +58,42 @@ class _Register3State extends State<Register3> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Fecha válida   ${ddController.text}/${mmController.text}/${yyyyController.text}',
-        ),
-      ),
-    );
+    final args =
+        (ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?) ??
+        {};
+    final uid = (args['uid'] ?? '').toString();
 
-    //   navegar a register4
-    Navigator.pushNamed(context, '/register4');
+    if (uid.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('❌ No llegó el UID del registro')),
+      );
+      return;
+    }
+
+    final fechaIso =
+        '${yyyy.toString().padLeft(4, '0')}-${_two(mm)}-${_two(dd)}';
+
+    setState(() => loading = true);
+
+    final repo = RegisterRepository();
+    try {
+      await repo.guardarFechaNacimiento(uid: uid, fechaISO: fechaIso);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('✅ Fecha guardada: $fechaIso')));
+
+      Navigator.pushNamed(context, '/register4', arguments: {'uid': uid});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('❌ Error: $e')));
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
   }
 
   @override
@@ -151,7 +182,6 @@ class _Register3State extends State<Register3> {
                             if (n < 1900 || n > yearNow) {
                               return '1900 - $yearNow';
                             }
-
                             return null;
                           },
                         ),
@@ -161,7 +191,6 @@ class _Register3State extends State<Register3> {
 
                   const SizedBox(height: 6),
 
-                  //   Mensaje de ayuda (se ve bonito y evita confusión)
                   Text(
                     'Ejemplo: 05 / 09 / 2002',
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
@@ -172,7 +201,7 @@ class _Register3State extends State<Register3> {
                   SizedBox(
                     height: 48,
                     child: TextButton(
-                      onPressed: continuar,
+                      onPressed: loading ? null : continuar,
                       style: TextButton.styleFrom(
                         backgroundColor: primaryBlue,
                         foregroundColor: Colors.white,
@@ -180,13 +209,22 @@ class _Register3State extends State<Register3> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      child: const Text(
-                        'Continuar',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: loading
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Continuar',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                     ),
                   ),
 

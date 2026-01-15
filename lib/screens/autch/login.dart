@@ -40,8 +40,13 @@ class _LoginState extends State<Login> {
 
       if (!mounted) return;
 
-      // ✅ Login OK -> ir a denuncias
-      Navigator.pushReplacementNamed(context, '/denuncias');
+      //  Login OK -> ir a denuncias
+      //Navigator.pushReplacementNamed(context, '/denuncias');
+      Navigator.pushReplacementNamed(
+        context,
+        '/denuncias',
+        arguments: {'showWelcome': true},
+      );
     } catch (e) {
       if (!mounted) return;
 

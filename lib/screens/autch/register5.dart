@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+// Ajusta el import según tu estructura
+import '../../repositories/register_repository.dart';
+
 class Register5 extends StatefulWidget {
   const Register5({super.key});
 
@@ -19,6 +22,19 @@ class _Register5State extends State<Register5> {
   bool ocultar1 = true;
   bool ocultar2 = true;
 
+  bool _loading = false;
+  String? _uid;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) {
+      final uid = args["uid"]?.toString();
+      if (uid != null && uid.isNotEmpty) _uid = uid;
+    }
+  }
+
   @override
   void dispose() {
     passController.dispose();
@@ -26,26 +42,60 @@ class _Register5State extends State<Register5> {
     super.dispose();
   }
 
-  void iniciar() {
+  Future<void> iniciar() async {
     if (!formKey.currentState!.validate()) return;
 
     if (!aceptarTerminos) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Debes aceptar los Términos y la Política  '),
+          content: Text('Debes aceptar los Términos y la Política'),
         ),
       );
       return;
     }
 
-    //   aquí luego conectas: crear usuario / guardar en backend / supabase
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Registro listo   (solo frontend)')),
-    );
+    if (_uid == null || _uid!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: no se encontró el uid del registro.'),
+        ),
+      );
+      return;
+    }
 
-    // Ejemplo:
-    // Navigator.pushReplacementNamed(context, '/');
-    Navigator.pushNamed(context, '/denuncias');
+    setState(() => _loading = true);
+
+    try {
+      final repo = RegisterRepository();
+
+      final resp = await repo.finalizar(
+        uid: _uid!,
+        password: passController.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      // resp puede traer {detail, usuario_id}
+      final detail = (resp["detail"] ?? "Registro completo ✅").toString();
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(detail)));
+
+      // Recomendado: volver a Login para iniciar sesión ya con correo/password
+      Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
+
+      // Si tú quieres mandarlo directo a denuncias, haz esto:
+      // Navigator.pushNamedAndRemoveUntil(context, '/denuncias', (r) => false);
+      // (pero recuerda: aun no hay login automático, así que SessionGuard te puede sacar)
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -63,7 +113,6 @@ class _Register5State extends State<Register5> {
                 children: [
                   const SizedBox(height: 10),
 
-                  // LOGO ARRIBA
                   Image.asset(
                     'assets/logo_gad_municipal_letras.png',
                     height: 95,
@@ -72,7 +121,6 @@ class _Register5State extends State<Register5> {
 
                   const SizedBox(height: 70),
 
-                  // CONTRASEÑA
                   const Text(
                     'Contraseña',
                     style: TextStyle(
@@ -105,7 +153,6 @@ class _Register5State extends State<Register5> {
 
                   const SizedBox(height: 18),
 
-                  // REPETIR CONTRASEÑA
                   const Text(
                     'Repetir contraseña',
                     style: TextStyle(
@@ -140,15 +187,16 @@ class _Register5State extends State<Register5> {
 
                   const SizedBox(height: 10),
 
-                  // CHECK TÉRMINOS (como tu mock)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Checkbox(
                         value: aceptarTerminos,
                         activeColor: primaryBlue,
-                        onChanged: (v) =>
-                            setState(() => aceptarTerminos = v ?? false),
+                        onChanged: _loading
+                            ? null
+                            : (v) =>
+                                  setState(() => aceptarTerminos = v ?? false),
                       ),
                       Expanded(
                         child: Padding(
@@ -188,11 +236,10 @@ class _Register5State extends State<Register5> {
 
                   const SizedBox(height: 14),
 
-                  // BOTÓN INICIAR
                   SizedBox(
                     height: 48,
                     child: TextButton(
-                      onPressed: iniciar,
+                      onPressed: _loading ? null : iniciar,
                       style: TextButton.styleFrom(
                         backgroundColor: primaryBlue,
                         foregroundColor: Colors.white,
@@ -200,19 +247,27 @@ class _Register5State extends State<Register5> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      child: const Text(
-                        'Iniciar',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: _loading
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Iniciar',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                     ),
                   ),
 
                   const SizedBox(height: 70),
 
-                  // IMAGEN ABAJO
                   Image.asset(
                     'assets/logo_gad_municipal_claro animacion.png',
                     height: 120,

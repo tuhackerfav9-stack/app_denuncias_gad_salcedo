@@ -1,7 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-//import 'package:image_picker/image_picker.dart';
+
 import '../../settings/session.dart';
+import '../../repositories/perfil_repository.dart';
+import '../../models/perfil_model.dart';
 
 class CiudadanoPerfilScreen extends StatefulWidget {
   const CiudadanoPerfilScreen({super.key});
@@ -14,50 +15,41 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
   static const Color primaryBlue = Color(0xFF2C64C4);
 
   final formKey = GlobalKey<FormState>();
-  // navegación inferior
   int currentIndex = 0;
-  // ====== bottom nav ======
-  void _onBottomNavTap(int index) {
-    setState(() => currentIndex = index);
 
-    if (index == 0) Navigator.pushNamed(context, '/denuncias');
-    if (index == 1) Navigator.pushNamed(context, '/form/denuncias');
-    if (index == 2) Navigator.pushNamed(context, '/chatbot');
-    if (index == 3) Navigator.pushNamed(context, '/mapadenuncias');
-  }
+  // repo
+  final repo = PerfilRepository();
+
+  // loading
+  bool _loading = true;
+  bool _saving = false;
+
+  PerfilModel? _perfil;
 
   // Controllers
-  final cedulaController = TextEditingController(text: '0500000000');
-  final nombresController = TextEditingController(text: 'cristian santiago');
-  final apellidosController = TextEditingController(text: 'Alcocer Cando');
-  final telefonoController = TextEditingController(text: '0999999999');
-  final correoController = TextEditingController(text: 'usuario@correo.com');
-  final fechaNacController = TextEditingController(text: '2001-01-01');
+  final cedulaController = TextEditingController();
+  final nombresController = TextEditingController();
+  final apellidosController = TextEditingController();
+  final telefonoController = TextEditingController();
+  final correoController = TextEditingController();
+  final fechaNacController = TextEditingController();
 
   // Password toggle
   bool cambiarContrasena = false;
   final passActualController = TextEditingController();
   final passNuevaController = TextEditingController();
   final passConfirmarController = TextEditingController();
-
-  // Foto
-  File? fotoLocal;
+  bool obscurePassActual = true;
+  bool obscurePassNueva = true;
+  bool obscurePassConfirmar = true;
 
   // Para saber si hubo cambios
-  late Map<String, String> originalValues;
+  Map<String, String> originalValues = {};
 
   @override
   void initState() {
     super.initState();
-
-    originalValues = {
-      'cedula': cedulaController.text,
-      'nombres': nombresController.text,
-      'apellidos': apellidosController.text,
-      'telefono': telefonoController.text,
-      'correo': correoController.text,
-      'fecha': fechaNacController.text,
-    };
+    _loadPerfil();
   }
 
   @override
@@ -75,30 +67,69 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
     super.dispose();
   }
 
-  bool _huboCambios() {
-    if (fotoLocal != null) return true;
+  // ====== bottom nav ======
+  void _onBottomNavTap(int index) {
+    setState(() => currentIndex = index);
 
-    return cedulaController.text != originalValues['cedula'] ||
-        nombresController.text != originalValues['nombres'] ||
-        apellidosController.text != originalValues['apellidos'] ||
-        telefonoController.text != originalValues['telefono'] ||
-        correoController.text != originalValues['correo'] ||
-        fechaNacController.text != originalValues['fecha'] ||
-        (cambiarContrasena &&
-            (passActualController.text.isNotEmpty ||
-                passNuevaController.text.isNotEmpty ||
-                passConfirmarController.text.isNotEmpty));
+    if (index == 0) Navigator.pushNamed(context, '/denuncias');
+    if (index == 1) Navigator.pushNamed(context, '/form/denuncias');
+    if (index == 2) Navigator.pushNamed(context, '/chatbot');
+    if (index == 3) Navigator.pushNamed(context, '/mapadenuncias');
   }
 
-  //Future<void> _pickFoto() async {
-  //  final picker = ImagePicker();
-  //  final x = await picker.pickImage(
-  //    source: ImageSource.gallery,
-  //    imageQuality: 85,
-  //  );
-  //  if (x == null) return;
-  //  setState(() => fotoLocal = File(x.path));
-  //}
+  Future<void> _loadPerfil() async {
+    setState(() => _loading = true);
+
+    try {
+      final p = await repo.getPerfil();
+
+      _perfil = p;
+
+      // set controllers
+      cedulaController.text = p.cedula ?? "";
+      correoController.text = p.correo;
+      nombresController.text = p.nombres;
+      apellidosController.text = p.apellidos;
+      telefonoController.text = p.telefono;
+
+      if (p.fechaNacimiento != null) {
+        final d = p.fechaNacimiento!;
+        final yyyy = d.year.toString().padLeft(4, '0');
+        final mm = d.month.toString().padLeft(2, '0');
+        final dd = d.day.toString().padLeft(2, '0');
+        fechaNacController.text = "$yyyy-$mm-$dd";
+      } else {
+        fechaNacController.text = "";
+      }
+
+      originalValues = {
+        'cedula': cedulaController.text,
+        'nombres': nombresController.text,
+        'apellidos': apellidosController.text,
+        'telefono': telefonoController.text,
+        'correo': correoController.text,
+        'fecha': fechaNacController.text,
+      };
+    } catch (e) {
+      _snack("❌ No se pudo cargar el perfil: $e");
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  bool _huboCambiosPerfil() {
+    return nombresController.text != (originalValues['nombres'] ?? "") ||
+        apellidosController.text != (originalValues['apellidos'] ?? "") ||
+        telefonoController.text != (originalValues['telefono'] ?? "") ||
+        fechaNacController.text != (originalValues['fecha'] ?? "");
+  }
+
+  bool _huboCambiosContrasena() {
+    if (!cambiarContrasena) return false;
+    return passActualController.text.trim().isNotEmpty ||
+        passNuevaController.text.trim().isNotEmpty ||
+        passConfirmarController.text.trim().isNotEmpty;
+  }
 
   Future<void> _pickFecha() async {
     final now = DateTime.now();
@@ -124,10 +155,21 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
     });
   }
 
-  void _guardar() {
+  DateTime? _parseFecha(String s) {
+    final t = s.trim();
+    if (t.isEmpty) return null;
+    return DateTime.tryParse(t);
+  }
+
+  Future<void> _guardar() async {
+    if (_saving) return;
+
     if (!formKey.currentState!.validate()) return;
 
-    if (!_huboCambios()) {
+    final cambiosPerfil = _huboCambiosPerfil();
+    final cambiosClave = _huboCambiosContrasena();
+
+    if (!cambiosPerfil && !cambiosClave) {
       _snack('No hay cambios para guardar');
       return;
     }
@@ -149,25 +191,50 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
       }
     }
 
-    // SOLO UI
-    _snack('Datos guardados   (solo frontend)');
+    setState(() => _saving = true);
 
-    // Actualiza "original" para que ya no marque cambios
-    setState(() {
-      originalValues = {
-        'cedula': cedulaController.text,
-        'nombres': nombresController.text,
-        'apellidos': apellidosController.text,
-        'telefono': telefonoController.text,
-        'correo': correoController.text,
-        'fecha': fechaNacController.text,
-      };
-      fotoLocal = null;
-      cambiarContrasena = false;
-      passActualController.clear();
-      passNuevaController.clear();
-      passConfirmarController.clear();
-    });
+    try {
+      // 1) actualizar perfil (PATCH) solo si cambió algo
+      if (cambiosPerfil) {
+        final nombres = nombresController.text.trim();
+        final apellidos = apellidosController.text.trim();
+        final telefono = telefonoController.text.trim();
+        final fecha = _parseFecha(fechaNacController.text);
+
+        await repo.updatePerfilPatch(
+          nombres: nombres,
+          apellidos: apellidos,
+          telefono: telefono,
+          fechaNacimiento: fecha,
+        );
+      }
+
+      // 2) cambiar contraseña (solo si checkbox activo)
+      if (cambiarContrasena) {
+        await repo.changePassword(
+          actual: passActualController.text.trim(),
+          nueva: passNuevaController.text.trim(),
+          confirmar: passConfirmarController.text.trim(),
+        );
+      }
+
+      _snack("✅ Cambios guardados");
+
+      // refrescar perfil (para mantener consistencia)
+      await _loadPerfil();
+
+      // limpiar zona contraseña
+      setState(() {
+        cambiarContrasena = false;
+        passActualController.clear();
+        passNuevaController.clear();
+        passConfirmarController.clear();
+      });
+    } catch (e) {
+      _snack("❌ Error guardando: $e");
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   void _snack(String msg) {
@@ -176,10 +243,11 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final emailFuture = Session.email();
+
     return Scaffold(
       backgroundColor: Colors.white,
 
-      // Drawer (Ayuda activo/resaltado)
       drawer: Drawer(
         child: SafeArea(
           child: Column(
@@ -190,8 +258,6 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
                 builder: (context, snap) {
                   final tipo = snap.data?[0] ?? "Ciudadano";
                   final email = snap.data?[1] ?? "sin correo";
-
-                  // bonito: primera letra en avatar
                   final letra = email.isNotEmpty ? email[0].toUpperCase() : "C";
 
                   return ListTile(
@@ -203,7 +269,7 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
               ),
               const Divider(),
 
-              //  AYUDA ACTIVO (resaltado)
+              // PERFIL activo
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
@@ -211,7 +277,7 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: ListTile(
-                  leading: const Icon(Icons.info_outline, color: primaryBlue),
+                  leading: const Icon(Icons.person_outline, color: primaryBlue),
                   title: const Text(
                     "Perfil",
                     style: TextStyle(
@@ -221,18 +287,19 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
                   ),
                   onTap: () {
                     Navigator.pop(context);
-                    // ya estás en perfil
                   },
                 ),
               ),
+
               ListTile(
-                leading: const Icon(Icons.person_outline),
+                leading: const Icon(Icons.info_outline),
                 title: const Text("Ayuda"),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.pushNamed(context, '/ayuda');
                 },
               ),
+
               const Spacer(),
               ListTile(
                 leading: const Icon(Icons.logout),
@@ -256,16 +323,20 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
         centerTitle: true,
         iconTheme: const IconThemeData(color: primaryBlue),
         title: const Text(
-          "Pefil",
+          "Perfil",
           style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
         ),
         actions: [
+          IconButton(
+            onPressed: _loading ? null : _loadPerfil,
+            icon: const Icon(Icons.refresh),
+            tooltip: "Actualizar",
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 14),
             child: FutureBuilder<String?>(
-              future: Session.email(),
+              future: emailFuture,
               builder: (context, snapshot) {
-                // Mientras carga
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const CircleAvatar(
                     radius: 16,
@@ -294,228 +365,258 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
         ],
       ),
 
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 90),
-        child: Form(
-          key: formKey,
-          child: Column(
-            children: [
-              // AVATAR (inicial del correo)
-              Center(
-                child: FutureBuilder<String?>(
-                  future: Session.email(),
-                  builder: (context, snapshot) {
-                    final email = snapshot.data ?? "";
-                    final letra = email.isNotEmpty
-                        ? email[0].toUpperCase()
-                        : "C";
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 90),
+              child: Form(
+                key: formKey,
+                child: Column(
+                  children: [
+                    // AVATAR letra del correo
+                    Center(
+                      child: FutureBuilder<String?>(
+                        future: Session.email(),
+                        builder: (context, snapshot) {
+                          final email = snapshot.data ?? "";
+                          final letra = email.isNotEmpty
+                              ? email[0].toUpperCase()
+                              : "C";
 
-                    return Column(
-                      children: [
-                        Container(
-                          width: 150,
-                          height: 150,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.grey.shade300,
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            letra,
-                            style: const TextStyle(
-                              fontSize: 64,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black54,
-                            ),
-                          ),
+                          return Column(
+                            children: [
+                              Container(
+                                width: 150,
+                                height: 150,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.grey.shade300,
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  letra,
+                                  style: const TextStyle(
+                                    fontSize: 64,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                "Editar perfil",
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // CÉDULA (solo lectura)
+                    _label('Cédula de identidad'),
+                    const SizedBox(height: 8),
+                    _input(
+                      controller: cedulaController,
+                      hint: 'cédula',
+                      readOnly: true,
+                      enabled: false,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Correo (solo lectura)
+                    _label('Correo electrónico'),
+                    const SizedBox(height: 8),
+                    _input(
+                      controller: correoController,
+                      hint: 'correo',
+                      readOnly: true,
+                      enabled: false,
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // Nombres editable
+                    _label('Nombres'),
+                    const SizedBox(height: 8),
+                    _input(
+                      controller: nombresController,
+                      hint: 'Ej. Cristian Santiago',
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Los nombres son requeridos'
+                          : null,
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // Apellidos editable
+                    _label('Apellidos'),
+                    const SizedBox(height: 8),
+                    _input(
+                      controller: apellidosController,
+                      hint: 'Ej. Alcocer Cando',
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Los apellidos son requeridos'
+                          : null,
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // Teléfono editable
+                    _label('Teléfono'),
+                    const SizedBox(height: 8),
+                    _input(
+                      controller: telefonoController,
+                      hint: 'Ej. 0999999999',
+                      keyboardType: TextInputType.phone,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'El teléfono es requerido';
+                        }
+                        if (v.trim().length < 10) {
+                          return 'Debe tener mínimo 10 dígitos';
+                        }
+                        return null;
+                      },
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // Fecha nacimiento editable
+                    _label('Fecha nacimiento'),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: _pickFecha,
+                      child: AbsorbPointer(
+                        child: _input(
+                          controller: fechaNacController,
+                          hint: 'YYYY-MM-DD',
+                          suffixIcon: const Icon(Icons.calendar_month),
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Selecciona la fecha'
+                              : null,
                         ),
-                        const SizedBox(height: 8),
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // CAMBIAR CONTRASEÑA
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: cambiarContrasena,
+                          onChanged: _saving
+                              ? null
+                              : (v) => setState(
+                                  () => cambiarContrasena = v ?? false,
+                                ),
+                          activeColor: primaryBlue,
+                        ),
                         const Text(
-                          "Foto",
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
-                          ),
+                          'Cambiar contraseña',
+                          style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ],
-                    );
-                  },
+                    ),
+
+                    if (cambiarContrasena) ...[
+                      const SizedBox(height: 8),
+                      _label('Contraseña actual'),
+                      const SizedBox(height: 8),
+                      _input(
+                        controller: passActualController,
+                        hint: '**********',
+                        obscureText: obscurePassActual,
+                        suffixIcon: IconButton(
+                          onPressed: () => setState(
+                            () => obscurePassActual = !obscurePassActual,
+                          ),
+                          icon: Icon(
+                            obscurePassActual
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+                      _label('Nueva contraseña'),
+                      const SizedBox(height: 8),
+
+                      _input(
+                        controller: passNuevaController,
+                        hint: 'mínimo 6 caracteres',
+                        obscureText: obscurePassNueva,
+                        suffixIcon: IconButton(
+                          onPressed: () => setState(
+                            () => obscurePassNueva = !obscurePassNueva,
+                          ),
+                          icon: Icon(
+                            obscurePassNueva
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+                      _label('Confirmar contraseña'),
+                      const SizedBox(height: 8),
+
+                      _input(
+                        controller: passConfirmarController,
+                        hint: 'repite la contraseña',
+                        obscureText: obscurePassConfirmar,
+                        suffixIcon: IconButton(
+                          onPressed: () => setState(
+                            () => obscurePassConfirmar = !obscurePassConfirmar,
+                          ),
+                          icon: Icon(
+                            obscurePassConfirmar
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 20),
+
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: TextButton(
+                        onPressed: _saving ? null : _guardar,
+                        style: TextButton.styleFrom(
+                          backgroundColor: _saving ? Colors.grey : primaryBlue,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: Text(
+                          _saving ? 'Guardando...' : 'Guardar',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
+            ),
 
-              const SizedBox(height: 18),
-
-              // CAMPOS
-              _label('cedula de identidad'),
-              const SizedBox(height: 8),
-              _input(
-                controller: cedulaController,
-                hint: 'ej. 0500000000',
-                keyboardType: TextInputType.number,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return 'La cédula es requerida';
-                  }
-
-                  if (v.trim().length < 10) {
-                    return 'La cédula debe tener 10 dígitos';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 14),
-              _label('nombres'),
-              const SizedBox(height: 8),
-              _input(
-                controller: nombresController,
-                hint: 'ej. Cristian Santiago',
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? 'Los nombres son requeridos'
-                    : null,
-              ),
-
-              const SizedBox(height: 14),
-              _label('apellidos'),
-              const SizedBox(height: 8),
-              _input(
-                controller: apellidosController,
-                hint: 'ej. Alcocer Cando',
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? 'Los apellidos son requeridos'
-                    : null,
-              ),
-
-              const SizedBox(height: 14),
-              _label('teléfono'),
-              const SizedBox(height: 8),
-              _input(
-                controller: telefonoController,
-                hint: 'ej. 0999999999',
-                keyboardType: TextInputType.phone,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return 'El teléfono es requerido';
-                  }
-
-                  if (v.trim().length < 10) {
-                    return 'Debe tener mínimo 10 dígitos';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 14),
-              _label('correo electrónico'),
-              const SizedBox(height: 8),
-              _input(
-                controller: correoController,
-                hint: 'ej. usuario@gmail.com',
-                keyboardType: TextInputType.emailAddress,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return 'El correo es requerido';
-                  }
-
-                  if (!v.contains('@')) return 'Correo inválido';
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 14),
-              _label('fecha nacimiento'),
-              const SizedBox(height: 8),
-              GestureDetector(
-                onTap: _pickFecha,
-                child: AbsorbPointer(
-                  child: _input(
-                    controller: fechaNacController,
-                    hint: 'YYYY-MM-DD',
-                    suffixIcon: const Icon(Icons.calendar_month),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Selecciona la fecha'
-                        : null,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 18),
-
-              // CAMBIAR CONTRASEÑA
-              Row(
-                children: [
-                  Checkbox(
-                    value: cambiarContrasena,
-                    onChanged: (v) =>
-                        setState(() => cambiarContrasena = v ?? false),
-                    activeColor: primaryBlue,
-                  ),
-                  const Text(
-                    'Cambiar contraseña',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-
-              if (cambiarContrasena) ...[
-                const SizedBox(height: 8),
-                _label('contraseña actual'),
-                const SizedBox(height: 8),
-                _input(
-                  controller: passActualController,
-                  hint: '••••••••',
-                  obscureText: true,
-                ),
-
-                const SizedBox(height: 14),
-                _label('nueva contraseña'),
-                const SizedBox(height: 8),
-                _input(
-                  controller: passNuevaController,
-                  hint: 'mínimo 6 caracteres',
-                  obscureText: true,
-                ),
-
-                const SizedBox(height: 14),
-                _label('confirmar contraseña'),
-                const SizedBox(height: 8),
-                _input(
-                  controller: passConfirmarController,
-                  hint: 'repite la contraseña',
-                  obscureText: true,
-                ),
-              ],
-
-              const SizedBox(height: 20),
-
-              // GUARDAR
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: TextButton(
-                  onPressed: _guardar,
-                  style: TextButton.styleFrom(
-                    backgroundColor: primaryBlue,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text(
-                    'Guardar',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-
-      // bottom nav con navegación real
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex:
-            0, // ayuda NO está en bottom nav, entonces deja inicio fijo o maneja como quieras
+        currentIndex: currentIndex,
         onTap: _onBottomNavTap,
         type: BottomNavigationBarType.fixed,
         showSelectedLabels: false,
@@ -552,12 +653,16 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
     String? Function(String?)? validator,
     bool obscureText = false,
     Widget? suffixIcon,
+    bool readOnly = false,
+    bool enabled = true,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       validator: validator,
       obscureText: obscureText,
+      readOnly: readOnly,
+      enabled: enabled,
       decoration: InputDecoration(
         hintText: hint,
         suffixIcon: suffixIcon,

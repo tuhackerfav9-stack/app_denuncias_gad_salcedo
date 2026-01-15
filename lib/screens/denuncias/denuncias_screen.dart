@@ -17,6 +17,71 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
   final repo = DenunciasRepository();
 
   late Future<_DenunciasData> _future;
+  bool _welcomeShown = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (_welcomeShown) return;
+
+    final args = ModalRoute.of(context)?.settings.arguments;
+    final showWelcome = (args is Map && args['showWelcome'] == true);
+
+    if (showWelcome) {
+      _welcomeShown = true;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _mostrarBienvenida();
+      });
+    }
+  }
+
+  void _mostrarBienvenida() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: false, // solo se cierra con la X
+      barrierLabel: "Bienvenida",
+      pageBuilder: (_, __, ___) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Fondo del popup (imagen)
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 18),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Image.asset('assets/foto_menu.png', fit: BoxFit.cover),
+                ),
+
+                // Botón X arriba a la derecha
+                Positioned(
+                  top: 10,
+                  right: 22,
+                  child: InkWell(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withAlpha((0.55 * 255).round()),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -455,7 +520,7 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
               return ListView(
                 children: const [
                   SizedBox(height: 120),
-                  Center(child: Text("Aún no tienes denuncias ni borradores.")),
+                  Center(child: Text("Aún no tienes denuncias, registra una.")),
                 ],
               );
             }

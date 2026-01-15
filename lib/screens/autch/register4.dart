@@ -2,6 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+// Ajusta el import según tu estructura
+import '../../repositories/register_repository.dart';
+
 class Register4 extends StatefulWidget {
   const Register4({super.key});
 
@@ -16,6 +19,23 @@ class _Register4State extends State<Register4> {
   File? cedulaTrasera;
 
   final ImagePicker picker = ImagePicker();
+
+  bool _subiendo = false;
+  String? _uid;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    //  Recupera el uid del borrador desde argumentos
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) {
+      final uid = args["uid"]?.toString();
+      if (uid != null && uid.isNotEmpty) {
+        _uid = uid;
+      }
+    }
+  }
 
   Future<ImageSource?> _elegirFuente() async {
     return showModalBottomSheet<ImageSource>(
@@ -77,8 +97,17 @@ class _Register4State extends State<Register4> {
     setState(() => cedulaTrasera = File(x.path));
   }
 
-  void subir() {
-    // ✅ Validación pro: decir qué falta exactamente
+  Future<void> subir() async {
+    // 1) Validaciones
+    if (_uid == null || _uid!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: no se encontró el uid del registro.'),
+        ),
+      );
+      return;
+    }
+
     if (cedulaFrontal == null || cedulaTrasera == null) {
       final faltan = <String>[];
       if (cedulaFrontal == null) faltan.add('frontal');
@@ -90,12 +119,36 @@ class _Register4State extends State<Register4> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Cédula lista ✅ (solo frontend)')),
-    );
+    // 2) Subida real
+    setState(() => _subiendo = true);
 
-    // ✅ navegar a register5
-    Navigator.pushNamed(context, '/register5');
+    try {
+      final repo = RegisterRepository();
+
+      await repo.subirDocumentos(
+        uid: _uid!,
+        cedulaFrontal: cedulaFrontal!,
+        cedulaTrasera: cedulaTrasera!,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Documentos guardados ✅')));
+
+      // Mantén el uid para el paso 5
+      Navigator.pushNamed(context, '/register5', arguments: {"uid": _uid});
+    } catch (e) {
+      if (!mounted) return;
+
+      // Si tu repo lanza Exception con "detail", aquí se mostrará el mensaje del backend
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _subiendo = false);
+    }
   }
 
   @override
@@ -111,7 +164,6 @@ class _Register4State extends State<Register4> {
               children: [
                 const SizedBox(height: 10),
 
-                // LOGO ARRIBA
                 Image.asset(
                   'assets/logo_gad_municipal_letras.png',
                   height: 95,
@@ -120,7 +172,6 @@ class _Register4State extends State<Register4> {
 
                 const SizedBox(height: 70),
 
-                // TITULO
                 const Text(
                   'Subir cédula',
                   style: TextStyle(
@@ -132,33 +183,34 @@ class _Register4State extends State<Register4> {
 
                 const SizedBox(height: 12),
 
-                // CARD FRONTAL
                 _CedulaCard(
                   title: 'Cédula',
                   subtitle: 'Parte frontal',
                   file: cedulaFrontal,
-                  onTap: _pickFrontal,
-                  onRemove: () => setState(() => cedulaFrontal = null),
+                  onTap: _subiendo ? () {} : _pickFrontal,
+                  onRemove: _subiendo
+                      ? () {}
+                      : () => setState(() => cedulaFrontal = null),
                 ),
 
                 const SizedBox(height: 12),
 
-                // CARD TRASERA
                 _CedulaCard(
                   title: 'Cédula',
                   subtitle: 'Parte trasera',
                   file: cedulaTrasera,
-                  onTap: _pickTrasera,
-                  onRemove: () => setState(() => cedulaTrasera = null),
+                  onTap: _subiendo ? () {} : _pickTrasera,
+                  onRemove: _subiendo
+                      ? () {}
+                      : () => setState(() => cedulaTrasera = null),
                 ),
 
                 const SizedBox(height: 14),
 
-                // BOTÓN SUBIR
                 SizedBox(
                   height: 48,
                   child: TextButton(
-                    onPressed: subir,
+                    onPressed: _subiendo ? null : subir,
                     style: TextButton.styleFrom(
                       backgroundColor: primaryBlue,
                       foregroundColor: Colors.white,
@@ -166,19 +218,27 @@ class _Register4State extends State<Register4> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    child: const Text(
-                      'subir',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: _subiendo
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'subir',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ),
 
                 const SizedBox(height: 18),
 
-                // TÉRMINOS
                 Text.rich(
                   TextSpan(
                     style: TextStyle(
@@ -211,7 +271,6 @@ class _Register4State extends State<Register4> {
 
                 const SizedBox(height: 70),
 
-                // IMAGEN ABAJO
                 Image.asset(
                   'assets/logo_gad_municipal_claro animacion.png',
                   height: 120,
@@ -256,7 +315,6 @@ class _CedulaCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Preview
             Container(
               width: 56,
               height: 56,
@@ -276,7 +334,6 @@ class _CedulaCard extends StatelessWidget {
             ),
             const SizedBox(width: 12),
 
-            // Textos
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
