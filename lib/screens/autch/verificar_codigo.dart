@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../repositories/password_reset_repository.dart';
 
 class VerificarCodigo extends StatefulWidget {
   const VerificarCodigo({super.key});
@@ -17,6 +18,18 @@ class _VerificarCodigoState extends State<VerificarCodigo> {
   );
   final List<FocusNode> focusNodes = List.generate(6, (_) => FocusNode());
 
+  bool loading = false;
+  String? resetId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) {
+      resetId = args["reset_id"]?.toString();
+    }
+  }
+
   @override
   void dispose() {
     for (final c in controllers) {
@@ -25,22 +38,16 @@ class _VerificarCodigoState extends State<VerificarCodigo> {
     for (final f in focusNodes) {
       f.dispose();
     }
-
     super.dispose();
   }
 
   String get codigo => controllers.map((c) => c.text.trim()).join();
 
   void _onChanged(int index, String value) {
-    // Solo 1 dígito
     if (value.length > 1) {
       controllers[index].text = value.substring(value.length - 1);
-      controllers[index].selection = TextSelection.fromPosition(
-        const TextPosition(offset: 1),
-      );
+      controllers[index].selection = const TextSelection.collapsed(offset: 1);
     }
-
-    // Avanza al siguiente
     if (controllers[index].text.isNotEmpty && index < 5) {
       focusNodes[index + 1].requestFocus();
     }
@@ -50,14 +57,22 @@ class _VerificarCodigoState extends State<VerificarCodigo> {
     if (event is! KeyDownEvent) return;
     if (event.logicalKey.keyLabel != 'Backspace') return;
 
-    // Si está vacío, vuelve al anterior
     if (controllers[index].text.isEmpty && index > 0) {
       focusNodes[index - 1].requestFocus();
       controllers[index - 1].clear();
     }
   }
 
-  void verificarCuenta() {
+  Future<void> verificarCuenta() async {
+    if (resetId == null || resetId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Falta reset_id (vuelve a enviar el código)'),
+        ),
+      );
+      return;
+    }
+
     if (codigo.length != 6) {
       ScaffoldMessenger.of(
         context,
@@ -65,12 +80,31 @@ class _VerificarCodigoState extends State<VerificarCodigo> {
       return;
     }
 
-    // ✅ Solo frontend
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Código verificado ✅ (solo frontend)')),
-    );
+    setState(() => loading = true);
 
-    Navigator.pushNamed(context, '/cambiar_password');
+    try {
+      final repo = PasswordResetRepository();
+      await repo.verificarCodigo(resetId: resetId!, codigo6: codigo);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Código verificado ✅')));
+
+      Navigator.pushNamed(
+        context,
+        '/cambiar_password',
+        arguments: {"reset_id": resetId},
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
   }
 
   @override
@@ -86,7 +120,6 @@ class _VerificarCodigoState extends State<VerificarCodigo> {
               children: [
                 const SizedBox(height: 10),
 
-                // Logo
                 Image.asset(
                   'assets/logo_gad_municipal_letras.png',
                   height: 95,
@@ -118,14 +151,13 @@ class _VerificarCodigoState extends State<VerificarCodigo> {
 
                 const SizedBox(height: 10),
 
-                // 6 cajas
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: List.generate(6, (i) {
                     return SizedBox(
                       width: 45,
                       child: KeyboardListener(
-                        focusNode: FocusNode(), // listener aparte
+                        focusNode: FocusNode(),
                         onKeyEvent: (e) => _onBackspace(i, e),
                         child: TextField(
                           controller: controllers[i],
@@ -166,7 +198,7 @@ class _VerificarCodigoState extends State<VerificarCodigo> {
                 SizedBox(
                   height: 48,
                   child: TextButton(
-                    onPressed: verificarCuenta,
+                    onPressed: loading ? null : verificarCuenta,
                     style: TextButton.styleFrom(
                       backgroundColor: primaryBlue,
                       foregroundColor: Colors.white,
@@ -174,52 +206,27 @@ class _VerificarCodigoState extends State<VerificarCodigo> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    child: const Text(
-                      'Verificar Cuenta',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: loading
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Verificar Cuenta',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
-                ),
-
-                const SizedBox(height: 18),
-
-                // Términos
-                Text.rich(
-                  TextSpan(
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 11.5,
-                    ),
-                    children: const [
-                      TextSpan(
-                        text: 'Al hacer clic en continuar, aceptas nuestros ',
-                      ),
-                      TextSpan(
-                        text: 'Términos de\nServicio',
-                        style: TextStyle(
-                          color: Colors.black87,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      TextSpan(text: ' y nuestra '),
-                      TextSpan(
-                        text: 'Política de Privacidad',
-                        style: TextStyle(
-                          color: Colors.black87,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  textAlign: TextAlign.center,
                 ),
 
                 const SizedBox(height: 70),
 
-                // Imagen abajo
                 Image.asset(
                   'assets/logo_gad_municipal_claro animacion.png',
                   height: 120,

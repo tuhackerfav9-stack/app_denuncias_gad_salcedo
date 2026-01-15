@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../repositories/password_reset_repository.dart';
 
 class RecuperarPassword extends StatefulWidget {
   const RecuperarPassword({super.key});
@@ -14,6 +15,8 @@ class _RecuperarPasswordState extends State<RecuperarPassword> {
   final cedulaController = TextEditingController();
   final correoController = TextEditingController();
 
+  bool loading = false;
+
   @override
   void dispose() {
     cedulaController.dispose();
@@ -23,19 +26,63 @@ class _RecuperarPasswordState extends State<RecuperarPassword> {
 
   bool _soloNumeros(String s) => RegExp(r'^\d+$').hasMatch(s);
 
-  void enviarCodigo() {
+  Future<void> enviarCodigo() async {
     if (!formKey.currentState!.validate()) return;
 
-    // ✅ SOLO FRONTEND: simular envío
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Código enviado ✅ (solo frontend)')),
-    );
+    setState(() => loading = true);
 
-    Navigator.pushNamed(
-      context,
-      '/verificar_codigo',
-      arguments: correoController.text.trim(),
-    );
+    try {
+      final repo = PasswordResetRepository();
+
+      final resp = await repo.enviarCodigo(
+        cedula: cedulaController.text,
+        correo: correoController.text,
+      );
+
+      if (!mounted) return;
+
+      final detail = (resp["detail"] ?? "Código enviado").toString();
+      final resetId = (resp["reset_id"] ?? "").toString();
+      final devCodigo = (resp["dev_codigo"] ?? "").toString();
+
+      // Siempre mostramos el detail
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(detail)));
+
+      // Si es DEV, mostramos el código
+      if (devCodigo.isNotEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("✅ Código (DEV): $devCodigo")));
+      }
+
+      // Si no vino reset_id (por seguridad backend puede devolver 200 sin reset_id)
+      if (resetId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Si los datos son correctos, te llegará el código."),
+          ),
+        );
+        return;
+      }
+
+      Navigator.pushNamed(
+        context,
+        '/verificar_codigo',
+        arguments: {
+          "reset_id": resetId,
+          "correo": correoController.text.trim(),
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
   }
 
   @override
@@ -116,7 +163,6 @@ class _RecuperarPasswordState extends State<RecuperarPassword> {
                       if (v == null || v.trim().isEmpty) {
                         return 'El correo es requerido';
                       }
-
                       final ok = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
                       if (!ok.hasMatch(v.trim())) return 'Correo inválido';
                       return null;
@@ -128,7 +174,7 @@ class _RecuperarPasswordState extends State<RecuperarPassword> {
                   SizedBox(
                     height: 48,
                     child: TextButton(
-                      onPressed: enviarCodigo,
+                      onPressed: loading ? null : enviarCodigo,
                       style: TextButton.styleFrom(
                         backgroundColor: primaryBlue,
                         foregroundColor: Colors.white,
@@ -136,46 +182,23 @@ class _RecuperarPasswordState extends State<RecuperarPassword> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      child: const Text(
-                        'Enviar Codigo',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: loading
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Enviar Codigo',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                     ),
-                  ),
-
-                  const SizedBox(height: 18),
-
-                  Text.rich(
-                    TextSpan(
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 11.5,
-                      ),
-                      children: const [
-                        TextSpan(
-                          text: 'Al hacer clic en continuar, aceptas nuestros ',
-                        ),
-                        TextSpan(
-                          text: 'Términos de\nServicio',
-                          style: TextStyle(
-                            color: Colors.black87,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        TextSpan(text: ' y nuestra '),
-                        TextSpan(
-                          text: 'Política de Privacidad',
-                          style: TextStyle(
-                            color: Colors.black87,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    textAlign: TextAlign.center,
                   ),
 
                   const SizedBox(height: 70),

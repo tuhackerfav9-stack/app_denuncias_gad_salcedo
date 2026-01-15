@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../repositories/password_reset_repository.dart';
 
 class CambiarPassword extends StatefulWidget {
   const CambiarPassword({super.key});
@@ -17,6 +18,18 @@ class _CambiarPasswordState extends State<CambiarPassword> {
   bool o1 = true;
   bool o2 = true;
 
+  bool loading = false;
+  String? resetId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) {
+      resetId = args["reset_id"]?.toString();
+    }
+  }
+
   @override
   void dispose() {
     pass1.dispose();
@@ -24,15 +37,45 @@ class _CambiarPasswordState extends State<CambiarPassword> {
     super.dispose();
   }
 
-  void guardar() {
+  Future<void> guardar() async {
     if (!formKey.currentState!.validate()) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Contraseña actualizada ✅ (solo frontend)')),
-    );
+    if (resetId == null || resetId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Falta reset_id (vuelve a enviar el código)'),
+        ),
+      );
+      return;
+    }
 
-    // volver al login
-    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+    setState(() => loading = true);
+
+    try {
+      final repo = PasswordResetRepository();
+      final resp = await repo.cambiarPassword(
+        resetId: resetId!,
+        password: pass1.text.trim(),
+        password2: pass2.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      final detail = (resp["detail"] ?? "Contraseña actualizada ✅").toString();
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(detail)));
+
+      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
   }
 
   @override
@@ -135,7 +178,7 @@ class _CambiarPasswordState extends State<CambiarPassword> {
                   SizedBox(
                     height: 48,
                     child: TextButton(
-                      onPressed: guardar,
+                      onPressed: loading ? null : guardar,
                       style: TextButton.styleFrom(
                         backgroundColor: primaryBlue,
                         foregroundColor: Colors.white,
@@ -143,13 +186,22 @@ class _CambiarPasswordState extends State<CambiarPassword> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      child: const Text(
-                        'Guardar',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: loading
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Guardar',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                     ),
                   ),
 
