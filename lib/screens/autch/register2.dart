@@ -47,6 +47,7 @@ class _Register2State extends State<Register2> {
 
       // En DEV tu backend devuelve dev_codigo (solo para pruebas)
       final devCodigo = (resp['dev_codigo'] ?? '').toString();
+      if (!mounted) return;
       if (devCodigo.isNotEmpty) {
         // opcional: mostrarlo para pruebas rápidas
         ScaffoldMessenger.of(context).showSnackBar(

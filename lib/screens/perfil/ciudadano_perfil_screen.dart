@@ -195,11 +195,12 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
 
     try {
       // 1) actualizar perfil (PATCH) solo si cambió algo
-      if (cambiosPerfil) {
+      if (cambiosPerfil && _perfil != null) {
         final nombres = nombresController.text.trim();
         final apellidos = apellidosController.text.trim();
         final telefono = telefonoController.text.trim();
         final fecha = _parseFecha(fechaNacController.text);
+        final _ = _perfil!.cedula;
 
         await repo.updatePerfilPatch(
           nombres: nombres,

@@ -111,8 +111,9 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
     if (firmaObj is Map) {
       final u =
           firmaObj["firma_url"] ?? firmaObj["url"] ?? firmaObj["url_firma"];
-      if (u != null && u.toString().trim().isNotEmpty)
+      if (u != null && u.toString().trim().isNotEmpty) {
         return u.toString().trim();
+      }
     }
 
     // si viene lista firmas: firmas: [{firma_url: ...}]
@@ -121,8 +122,9 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
       final first = firmas.first;
       if (first is Map) {
         final u = first["firma_url"] ?? first["url"] ?? first["url_firma"];
-        if (u != null && u.toString().trim().isNotEmpty)
+        if (u != null && u.toString().trim().isNotEmpty) {
           return u.toString().trim();
+        }
       }
     }
 
@@ -230,7 +232,7 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
 
     final hasCoords = lat != null && lng != null;
 
-    final LatLng? punto = hasCoords ? LatLng(lat!, lng!) : null;
+    final LatLng? punto = hasCoords ? LatLng(lat, lng) : null;
     final markers = <Marker>{
       if (punto != null) Marker(markerId: const MarkerId("p"), position: punto),
     };
@@ -370,10 +372,12 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: _estadoColor(estado).withOpacity(0.12),
+                            color: _estadoColor(estado).withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(999),
                             border: Border.all(
-                              color: _estadoColor(estado).withOpacity(0.4),
+                              color: _estadoColor(
+                                estado,
+                              ).withValues(alpha: 0.4),
                             ),
                           ),
                           child: Text(

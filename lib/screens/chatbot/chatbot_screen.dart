@@ -414,12 +414,14 @@ class _ChatbotScreenState extends State<ChatbotScreen>
               clipBehavior: Clip.antiAlias,
               child: Listener(
                 onPointerDown: (_) {
-                  if (!_firmaInteractuada)
+                  if (!_firmaInteractuada) {
                     setState(() => _firmaInteractuada = true);
+                  }
                 },
                 onPointerMove: (_) {
-                  if (!_firmaInteractuada)
+                  if (!_firmaInteractuada) {
                     setState(() => _firmaInteractuada = true);
+                  }
                 },
                 child: Signature(
                   controller: signatureController,

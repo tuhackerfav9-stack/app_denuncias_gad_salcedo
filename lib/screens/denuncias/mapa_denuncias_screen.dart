@@ -432,7 +432,7 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
                     top: 0,
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 10),
-                      color: Colors.white.withOpacity(0.85),
+                      color: Colors.white.withValues(alpha: 0.85),
                       child: const Center(
                         child: SizedBox(
                           height: 18,

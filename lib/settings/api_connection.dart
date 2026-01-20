@@ -13,6 +13,7 @@ class ApiConnection {
 
   //  CAMBIA SOLO LA IP SI HACE FALTA
   final String baseUrl = "http://192.168.100.46:8000/";
+  //final String baseUrl = "http://172.16.144.219:8000/";
 
   // =============================
   // HEADERS CON TOKEN
