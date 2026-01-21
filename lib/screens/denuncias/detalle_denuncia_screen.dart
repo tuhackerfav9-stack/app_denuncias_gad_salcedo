@@ -1,6 +1,11 @@
+//import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:printing/printing.dart';
+
 import '../../settings/session.dart';
+import '../../repositories/denuncias_repository.dart';
+import '../../pdf/denuncia_pdf_builder.dart';
 
 class DetalleDenunciaScreen extends StatefulWidget {
   const DetalleDenunciaScreen({super.key});
@@ -12,6 +17,27 @@ class DetalleDenunciaScreen extends StatefulWidget {
 class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
   static const Color primaryBlue = Color(0xFF2C64C4);
   int currentIndex = 0;
+
+  // ✅ NUEVO: repo + estado de carga del detalle real
+  final repo = DenunciasRepository();
+  Map<String, dynamic>? _detalle;
+  bool _loading = true;
+  String? _error;
+
+  // ✅ NUEVO: normalizar URL (por si backend manda /media/...)
+  String _absUrl(String? u) {
+    if (u == null) return "";
+    final s = u.trim();
+    if (s.isEmpty) return "";
+    if (s.startsWith("http://") || s.startsWith("https://")) return s;
+
+    // si viene /media/...
+    if (s.startsWith("/")) {
+      return "${repo.baseUrl}$s"; // baseUrl sin slash final
+    }
+
+    return "${repo.baseUrl}/$s";
+  }
 
   // Navegación inferior (MISMA que vienes usando)
   void _onBottomNavTap(int index) {
@@ -62,6 +88,11 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
           return dyn.tipoDenunciaNombre;
         case "fecha_creacion":
           return dyn.fechaCreacion;
+        case "created_at":
+          return dyn.createdAt;
+        case "createdAt":
+          return dyn.createdAt;
+
         default:
           return null;
       }
@@ -132,10 +163,6 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
   }
 
   List<Map<String, dynamic>> _extraerEvidencias(dynamic args) {
-    // evidencias puede venir:
-    // evidencias: [{tipo,url_archivo,nombre_archivo}]
-    // o evidencia: [...]
-    // o media: [...]
     final raw =
         _get(args, "evidencias") ??
         _get(args, "evidencia") ??
@@ -151,7 +178,6 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
           .toList();
     }
 
-    // algunos backends devuelven "results"
     if (raw is Map && raw["results"] is List) {
       final list = raw["results"] as List;
       return list
@@ -185,6 +211,62 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
     );
   }
 
+  // ✅ NUEVO: cargar detalle real al entrar (para firma/evidencias)
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final args = ModalRoute.of(context)?.settings.arguments;
+        final id = _get(args, "id")?.toString();
+
+        if (id == null || id.isEmpty) {
+          setState(() {
+            _error = "No llegó el ID de la denuncia.";
+            _loading = false;
+          });
+          return;
+        }
+
+        final detalle = await repo.getDetalleDenuncia(id);
+
+        // Normaliza firma
+        final f = detalle["firma"];
+        if (f is Map) {
+          final firmaUrl = _absUrl(f["firma_url"]?.toString());
+          detalle["firma_url"] = firmaUrl;
+        } else {
+          // por si viene directo
+          detalle["firma_url"] = _absUrl(detalle["firma_url"]?.toString());
+        }
+
+        // Normaliza evidencias
+        final evs = (detalle["evidencias"] as List?) ?? [];
+        final evidenciasNorm = evs.map((e) {
+          final m = Map<String, dynamic>.from(e as Map);
+          final u = (m["url_archivo"] ?? m["url"] ?? "").toString();
+          // guardamos normalizado donde el UI ya lo busca primero:
+          m["url_archivo"] = _absUrl(u);
+          return m;
+        }).toList();
+
+        detalle["evidencias"] = evidenciasNorm;
+
+        setState(() {
+          _detalle = Map<String, dynamic>.from(detalle);
+          _loading = false;
+          _error = null;
+        });
+      } catch (e) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments;
@@ -207,28 +289,187 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
       );
     }
 
-    final id = _get(args, "id");
-    final estado = _safe(_get(args, "estado"), fallback: "sin estado");
-    final desc = _safe(_get(args, "descripcion"), fallback: "Sin descripción");
-    final referencia = _safe(_get(args, "referencia"), fallback: "-");
+    // ✅ Fuente principal para pintar: detalle real si ya cargó
+    final source = _detalle ?? args;
 
+    // ✅ Si está cargando, mantenemos tu estilo (Scaffold igual)
+    if (_loading) {
+      return Scaffold(
+        drawer: Drawer(
+          child: SafeArea(
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+                FutureBuilder(
+                  future: Future.wait([Session.tipo(), Session.email()]),
+                  builder: (context, snap) {
+                    final tipo = snap.data?[0] ?? "Ciudadano";
+                    final email = snap.data?[1] ?? "sin correo";
+                    final letra = email.isNotEmpty
+                        ? email[0].toUpperCase()
+                        : "C";
+
+                    return ListTile(
+                      leading: CircleAvatar(child: Text(letra)),
+                      title: Text(tipo == "ciudadano" ? "Ciudadano" : tipo),
+                      subtitle: Text(email),
+                    );
+                  },
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.person_outline),
+                  title: const Text("Perfil"),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, '/perfil');
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: const Text("Ayuda"),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, '/ayuda');
+                  },
+                ),
+                const Spacer(),
+                ListTile(
+                  leading: const Icon(Icons.logout),
+                  title: const Text("Cerrar sesión"),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await Session.clear();
+                    if (!context.mounted) return;
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/',
+                      (r) => false,
+                    );
+                  },
+                ),
+                const SizedBox(height: 10),
+              ],
+            ),
+          ),
+        ),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: true,
+          iconTheme: const IconThemeData(color: primaryBlue),
+          title: const Text(
+            "Detalle Denuncia",
+            style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
+          ),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: currentIndex,
+          onTap: _onBottomNavTap,
+          type: BottomNavigationBarType.fixed,
+          showSelectedLabels: false,
+          showUnselectedLabels: false,
+          selectedItemColor: primaryBlue,
+          unselectedItemColor: Colors.grey.shade600,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: "Inicio"),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.format_align_center),
+              label: "denuncias",
+            ),
+            BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: "chat"),
+            BottomNavigationBarItem(icon: Icon(Icons.map), label: "mapa"),
+          ],
+        ),
+      );
+    }
+
+    // ✅ Si hubo error, muestra mensaje (sin romper estilo)
+    if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: true,
+          iconTheme: const IconThemeData(color: primaryBlue),
+          title: const Text(
+            "Detalle Denuncia",
+            style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              "Error cargando detalle:\n$_error",
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final id = _get(source, "id") ?? _get(args, "id");
+    final estado = _safe(_get(source, "estado"), fallback: "sin estado");
+    final desc = _safe(
+      _get(source, "descripcion"),
+      fallback: "Sin descripción",
+    );
+    final referencia = _safe(_get(source, "referencia"), fallback: "-");
+
+    // tipo: si viene detalle, puede venir tipo_denuncia: {nombre}
     final tipoNombre =
-        _get(args, "tipo_denuncia_nombre") ?? _get(args, "tipoDenunciaNombre");
+        _get(source, "tipo_denuncia_nombre") ??
+        _get(source, "tipoDenunciaNombre") ??
+        _get(source, "tipo_denuncia")?["nombre"];
+
     final tipoId =
-        _get(args, "tipo_denuncia_id") ?? _get(args, "tipoDenunciaId");
+        _get(source, "tipo_denuncia_id") ??
+        _get(source, "tipoDenunciaId") ??
+        _get(source, "tipo_denuncia")?["id"];
+
     final tipoTxt = _safe(
       tipoNombre,
       fallback: (tipoId != null ? "Tipo #$tipoId" : "Sin tipo"),
     );
 
-    final fecha = _get(args, "fecha_creacion") ?? _get(args, "fechaCreacion");
-    final fechaTxt = _safe(fecha, fallback: "-");
+    String fmtFecha(dynamic v) {
+      if (v == null) return "-";
+      try {
+        final s = v.toString();
+        final dt = DateTime.tryParse(s);
+        if (dt == null) return s;
+        final local = dt.toLocal();
+        return "${local.day.toString().padLeft(2, '0')}/"
+            "${local.month.toString().padLeft(2, '0')}/"
+            "${local.year} "
+            "${local.hour.toString().padLeft(2, '0')}:"
+            "${local.minute.toString().padLeft(2, '0')}";
+      } catch (_) {
+        return v.toString();
+      }
+    }
 
-    final lat = _toDouble(_get(args, "latitud"));
-    final lng = _toDouble(_get(args, "longitud"));
+    final fecha =
+        _get(source, "created_at") ??
+        _get(source, "createdAt") ??
+        _get(source, "fecha_creacion") ??
+        _get(source, "fechaCreacion");
 
-    final firmaUrl = _extraerFirmaUrl(args);
-    final evidencias = _extraerEvidencias(args);
+    final fechaTxt = fmtFecha(fecha);
+
+    final lat = _toDouble(_get(source, "latitud"));
+    final lng = _toDouble(_get(source, "longitud"));
+
+    // ✅ AHORA firma/evidencias salen del DETALLE real
+    final firmaUrl = _absUrl(_extraerFirmaUrl(source));
+    final evidencias = _extraerEvidencias(source).map((m) {
+      // normalizamos por si algo se cuela sin normalizar
+      final u = (m["url_archivo"] ?? m["url"] ?? "").toString();
+      m["url_archivo"] = _absUrl(u);
+      return m;
+    }).toList();
 
     final hasCoords = lat != null && lng != null;
 
@@ -336,7 +577,7 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
         ],
       ),
 
-      // ✅ BODY PRO
+      //  BODY PRO
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -533,6 +774,8 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
                             final tipo = (ev["tipo"] ?? "")
                                 .toString()
                                 .toLowerCase();
+
+                            // ✅ usa url_archivo (normalizado)
                             final url = (ev["url_archivo"] ?? ev["url"] ?? "")
                                 .toString();
 
@@ -616,7 +859,7 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    if (firmaUrl == null || firmaUrl.trim().isEmpty)
+                    if (firmaUrl.trim().isEmpty)
                       const Text("No hay firma registrada.")
                     else
                       GestureDetector(
@@ -645,14 +888,51 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
 
             const SizedBox(height: 14),
 
-            // Acciones estilo mock (opcional)
+            // Acciones (PDF) - MISMO
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _snack("Luego: descargar PDF"),
-                    icon: const Icon(Icons.favorite_border),
-                    label: const Text("Descargar pdf"),
+                    onPressed: () async {
+                      try {
+                        final detalle = await repo.getDetalleDenuncia(
+                          id.toString(),
+                        );
+
+                        final data = {
+                          "tipo_denuncia_nombre":
+                              detalle["tipo_denuncia"]?["nombre"],
+                          "descripcion": detalle["descripcion"],
+                          "estado": detalle["estado"],
+                          "referencia": detalle["referencia"],
+                          "direccion_texto": detalle["direccion_texto"],
+                          "latitud": detalle["latitud"],
+                          "longitud": detalle["longitud"],
+                          "created_at": detalle["created_at"],
+
+                          "ciudadano_nombres": detalle["ciudadano"]?["nombres"],
+                          "ciudadano_apellidos":
+                              detalle["ciudadano"]?["apellidos"],
+                          "ciudadano_cedula": detalle["ciudadano"]?["cedula"],
+
+                          // ✅ normaliza firma por si viene /media/
+                          "firma_url": _absUrl(detalle["firma"]?["firma_url"]),
+                          "evidencias": detalle["evidencias"],
+                        };
+
+                        final pdfBytes = await DenunciaPdfBuilder.build(
+                          denuncia: data,
+                        );
+
+                        await Printing.layoutPdf(
+                          onLayout: (_) async => pdfBytes,
+                        );
+                      } catch (e) {
+                        _snack("Error PDF: $e");
+                      }
+                    },
+                    icon: const Icon(Icons.picture_as_pdf),
+                    label: const Text("Descargar PDF"),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(

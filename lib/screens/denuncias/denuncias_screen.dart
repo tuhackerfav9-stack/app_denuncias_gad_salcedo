@@ -19,6 +19,29 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
   late Future<_DenunciasData> _future;
   bool _welcomeShown = false;
 
+  // ✅ NUEVO: Mapa local para mostrar nombre en vez de "Tipo #"
+  static const List<String> _tipos = [
+    'Alumbrado público',
+    'Basura / Aseo',
+    'Vías / Baches',
+    'Seguridad',
+    'Ruido',
+    'Otro',
+  ];
+
+  String _tipoNombreDesdeId(dynamic tipoId) {
+    if (tipoId == null) return "Sin tipo";
+    int? id;
+    if (tipoId is int) {
+      id = tipoId;
+    } else if (tipoId is String) {
+      id = int.tryParse(tipoId);
+    }
+    if (id == null) return "Sin tipo";
+    if (id >= 1 && id <= _tipos.length) return _tipos[id - 1];
+    return "Tipo #$id";
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -146,6 +169,9 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
     final tipoId = b["tipo_denuncia_id"];
     final expSeg = (b["expira_en_seg"] ?? 0);
 
+    // ✅ NUEVO: Nombre en vez de #id
+    final tipoNombre = _tipoNombreDesdeId(tipoId);
+
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
@@ -174,7 +200,10 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              Text("Tipo: #$tipoId"),
+
+              // ✅ CAMBIO: ya no "Tipo: #$tipoId"
+              Text("Tipo: $tipoNombre"),
+
               const SizedBox(height: 6),
               Text("Expira en: $expSeg seg"),
               const SizedBox(height: 10),
@@ -249,8 +278,10 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
   // =========================
   void _showPreviewDenuncia(DenunciaModel d) {
     final tipoTxt =
-        d.tipoDenunciaNombre ??
-        (d.tipoDenunciaId != null ? "Tipo #${d.tipoDenunciaId}" : "Sin tipo");
+        (d.tipoDenunciaNombre != null &&
+            d.tipoDenunciaNombre!.trim().isNotEmpty)
+        ? d.tipoDenunciaNombre!
+        : _tipoNombreDesdeId(d.tipoDenunciaId);
 
     showModalBottomSheet(
       context: context,
@@ -281,8 +312,6 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    //Navigator.pop(context);
-                    //_snack("Luego: DetalleDenunciaScreen (ID: ${d.id})");
                     Navigator.pushNamed(
                       context,
                       '/detalle_denuncia',
@@ -547,6 +576,9 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
                     final desc = (b["descripcion"] ?? "").toString();
                     final tipoId = b["tipo_denuncia_id"];
 
+                    //  CAMBIO: Nombre en vez de "#"
+                    final tipoNombre = _tipoNombreDesdeId(tipoId);
+
                     return _cardShell(
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(
@@ -557,7 +589,7 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
                           children: [
                             Expanded(
                               child: Text(
-                                "Tipo #$tipoId",
+                                tipoNombre, // ✅ aquí
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -604,10 +636,10 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
                 else
                   ...denuncias.map((d) {
                     final tipoTxt =
-                        d.tipoDenunciaNombre ??
-                        (d.tipoDenunciaId != null
-                            ? "Tipo #${d.tipoDenunciaId}"
-                            : "Sin tipo");
+                        (d.tipoDenunciaNombre != null &&
+                            d.tipoDenunciaNombre!.trim().isNotEmpty)
+                        ? d.tipoDenunciaNombre!
+                        : _tipoNombreDesdeId(d.tipoDenunciaId);
 
                     return _cardShell(
                       child: ListTile(

@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
@@ -44,11 +45,18 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
   LatLng? puntoDenuncia;
   Set<Marker> markers = {};
 
-  // Media
-  File? mediaFile;
-  bool mediaEsVideo = false;
+  // =========================
+  // EVIDENCIAS MULTIPLES
+  // =========================
+  final List<File> _fotos = [];
+  final List<File> _videos = [];
 
-  // Firma
+  // Para mostrar evidencias cuando editas (urls del backend)
+  final List<Map<String, dynamic>> _evidenciasRemotas = []; // {tipo,url}
+  bool get _tieneEvidencias =>
+      _fotos.isNotEmpty || _videos.isNotEmpty || _evidenciasRemotas.isNotEmpty;
+
+  // Firma (canvas)
   final SignatureController signatureController = SignatureController(
     penStrokeWidth: 3,
     penColor: Colors.black,
@@ -56,6 +64,11 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
   );
 
   bool _firmaInteractuada = false;
+
+  // Firma remota (si ya existe en borrador)
+  String? _firmaUrlRemota;
+  bool get _firmaBloqueada =>
+      _modoEditarBorrador && (_firmaUrlRemota?.trim().isNotEmpty ?? false);
 
   // ======= MODO EDICIÓN BORRADOR =======
   bool _modoEditarBorrador = false;
@@ -91,6 +104,9 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     }
   }
 
+  // =========================
+  // Precarga edición
+  // =========================
   void _precargarDesdeBorrador(Map<String, dynamic> b) {
     final desc = (b["descripcion"] ?? "").toString();
     final ref = (b["referencia"] ?? "").toString();
@@ -124,9 +140,51 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         mapController?.animateCamera(CameraUpdate.newLatLngZoom(p, 16));
         if (mounted) setState(() {});
       });
-    } else {
-      if (mounted) setState(() {});
     }
+
+    // ===== Firma remota (bloquea canvas) =====
+    // puede venir como firma_url directo o firma: {firma_url: ...}
+    final firmaUrl =
+        (b["firma_url"] ?? b["firmaUrl"] ?? b["url_firma"])?.toString() ??
+        (b["firma"] is Map
+            ? (b["firma"]["firma_url"] ?? b["firma"]["url"])?.toString()
+            : null);
+
+    if (firmaUrl != null && firmaUrl.trim().isNotEmpty) {
+      _firmaUrlRemota = firmaUrl.trim();
+      signatureController.clear();
+      _firmaInteractuada = false;
+    }
+
+    // ===== Evidencias remotas =====
+    _evidenciasRemotas.clear();
+
+    final raw =
+        b["evidencias"] ??
+        b["evidencia"] ??
+        b["media"] ??
+        (b["results"] ?? null);
+
+    List list = [];
+    if (raw is List) {
+      list = raw;
+    } else if (raw is Map && raw["results"] is List) {
+      list = raw["results"] as List;
+    }
+
+    for (final e in list) {
+      if (e is Map) {
+        final tipo = (e["tipo"] ?? "").toString().toLowerCase().trim();
+        final url = (e["url_archivo"] ?? e["url"] ?? "").toString().trim();
+        if (url.isEmpty) continue;
+        _evidenciasRemotas.add({
+          "tipo": tipo.isEmpty ? "archivo" : tipo,
+          "url": url,
+        });
+      }
+    }
+
+    if (mounted) setState(() {});
   }
 
   double? _toDouble(dynamic v) {
@@ -145,6 +203,9 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     super.dispose();
   }
 
+  // =========================
+  // Ubicación
+  // =========================
   Future<void> _initUbicacion() async {
     final ok = await _permisosUbicacion();
     if (!ok) return;
@@ -191,36 +252,67 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     return true;
   }
 
-  Future<void> _pickFoto() async {
+  // =========================
+  // Evidencias: pick multiple
+  // =========================
+  Future<void> _pickFotosMultiples() async {
+    final picker = ImagePicker();
+    final xs = await picker.pickMultiImage(imageQuality: 85);
+    if (xs.isEmpty) return;
+
+    setState(() {
+      for (final x in xs) {
+        _fotos.add(File(x.path));
+      }
+    });
+  }
+
+  Future<void> _pickFotoUna() async {
     final picker = ImagePicker();
     final x = await picker.pickImage(
       source: ImageSource.gallery,
       imageQuality: 85,
     );
     if (x == null) return;
+
     setState(() {
-      mediaFile = File(x.path);
-      mediaEsVideo = false;
+      _fotos.add(File(x.path));
     });
   }
 
-  Future<void> _pickVideo() async {
+  Future<void> _pickVideoUno() async {
     final picker = ImagePicker();
     final x = await picker.pickVideo(source: ImageSource.gallery);
     if (x == null) return;
+
     setState(() {
-      mediaFile = File(x.path);
-      mediaEsVideo = true;
+      _videos.add(File(x.path));
     });
   }
 
+  void _removeFoto(int index) {
+    setState(() => _fotos.removeAt(index));
+  }
+
+  void _removeVideo(int index) {
+    setState(() => _videos.removeAt(index));
+  }
+
+  // =========================
+  // Firma
+  // =========================
   bool _firmaValida() {
     final pts = signatureController.points;
     return _firmaInteractuada && pts.isNotEmpty && pts.length >= 2;
   }
 
-  // ✅ NUEVO: obtener bytes de firma y lanzar error si no se puede
   Future<List<int>> _obtenerFirmaBytesObligatoria() async {
+    if (_firmaBloqueada) {
+      throw Exception(
+        "La firma ya existe en el borrador (no se vuelve a firmar).",
+      );
+    }
+
     if (!_firmaValida()) {
       throw Exception("Firma obligatoria: no se detectó firma válida.");
     }
@@ -240,6 +332,9 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     return png;
   }
 
+  // =========================
+  // Enviar denuncia (mantiene tu rollback)
+  // =========================
   Future<void> _denunciar() async {
     if (!formKey.currentState!.validate()) return;
 
@@ -248,8 +343,8 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
       return;
     }
 
-    // Aquí hacemos la firma OBLIGATORIA antes de guardar nada
-    if (!_firmaValida()) {
+    // Firma obligatoria SOLO si no hay firma remota
+    if (!_firmaBloqueada && !_firmaValida()) {
       _snack('Firma antes de enviar');
       return;
     }
@@ -273,10 +368,13 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     bool borradorCreadoEnEsteEnvio = false;
 
     try {
-      //  1) Generar bytes de firma (obligatorio) antes de tocar backend
-      final firmaBytes = await _obtenerFirmaBytesObligatoria();
+      // 1) Firma bytes (solo si hace falta)
+      List<int>? firmaBytes;
+      if (!_firmaBloqueada) {
+        firmaBytes = await _obtenerFirmaBytesObligatoria();
+      }
 
-      //  2) Crear/Actualizar borrador
+      // 2) Crear/Actualizar borrador
       if (_modoEditarBorrador) {
         final id = _borradorId;
         if (id == null || id.isEmpty) {
@@ -292,7 +390,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
           referencia: referenciaController.text.trim(),
         );
         borradorIdFinal = id;
-        // no lo marcamos como creado aquí (ya existía)
       } else {
         final res = await repo.crearBorrador(
           tipoDenunciaId: tipoId,
@@ -310,40 +407,41 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         borradorCreadoEnEsteEnvio = true;
       }
 
-      //  3) Subir evidencia (si hay)
-      if (mediaFile != null) {
-        final tipo = mediaEsVideo ? "video" : "foto";
+      // 3) Subir evidencias nuevas (MULTIPLES)
+      for (final f in _fotos) {
         await repo.subirEvidenciaBorrador(
           borradorId: borradorIdFinal,
-          archivo: mediaFile!,
-          tipo: tipo,
+          archivo: f,
+          tipo: "foto",
+        );
+      }
+      for (final v in _videos) {
+        await repo.subirEvidenciaBorrador(
+          borradorId: borradorIdFinal,
+          archivo: v,
+          tipo: "video",
         );
       }
 
-      //  4) Subir firma (OBLIGATORIA, si falla -> catch)
-      await repo.subirFirmaBorrador(
-        borradorId: borradorIdFinal,
-        pngBytes: firmaBytes,
-      );
-
-      //  5) Finalizar (esto es lo que lo convierte en denuncia real)
-      //await repo.finalizarBorrador(borradorIdFinal);
+      // 4) Subir firma (solo si no existía)
+      if (!_firmaBloqueada && firmaBytes != null) {
+        await repo.subirFirmaBorrador(
+          borradorId: borradorIdFinal,
+          pngBytes: firmaBytes,
+        );
+      }
 
       _snack(" Denuncia enviada correctamente.");
 
       if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(context, '/denuncias', (r) => false);
     } catch (e) {
-      //  ROLLBACK: si el borrador se creó en este envío y algo falló (firma/evidencia/finalizar),
-      // lo eliminamos para que NO quede guardado nada.
+      // ROLLBACK si creó borrador en este envío
       if (borradorCreadoEnEsteEnvio && borradorIdFinal.isNotEmpty) {
         try {
           await repo.eliminarBorrador(borradorIdFinal);
-        } catch (_) {
-          // si falla el rollback, igual mostramos el error principal
-        }
+        } catch (_) {}
       }
-
       _snack("❌ Error: $e");
     } finally {
       if (mounted) setState(() => _enviando = false);
@@ -367,6 +465,37 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     if (index == 1) Navigator.pushNamed(context, '/form/denuncias');
     if (index == 2) Navigator.pushNamed(context, '/chatbot');
     if (index == 3) Navigator.pushNamed(context, '/mapadenuncias');
+  }
+
+  // =========================
+  // UI evidencias (preview)
+  // =========================
+  Widget _chipFile({
+    required IconData icon,
+    required String label,
+    required VoidCallback onRemove,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.grey.shade300),
+        color: Colors.white,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: primaryBlue),
+          const SizedBox(width: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: Text(label, overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 6),
+          InkWell(onTap: onRemove, child: const Icon(Icons.close, size: 18)),
+        ],
+      ),
+    );
   }
 
   @override
@@ -571,15 +700,17 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
               const SizedBox(height: 15),
 
-              _label('Subir Foto o video'),
+              _label('Subir evidencias (fotos y/o videos)'),
               const SizedBox(height: 8),
+
+              // Botones (multiples)
               Row(
                 children: [
                   Expanded(
                     child: TextButton.icon(
-                      onPressed: _pickFoto,
-                      icon: const Icon(Icons.photo),
-                      label: const Text('Foto'),
+                      onPressed: _pickFotosMultiples,
+                      icon: const Icon(Icons.photo_library),
+                      label: const Text('Fotos'),
                       style: TextButton.styleFrom(
                         backgroundColor: Colors.grey.shade200,
                         foregroundColor: Colors.black87,
@@ -589,7 +720,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: TextButton.icon(
-                      onPressed: _pickVideo,
+                      onPressed: _pickVideoUno,
                       icon: const Icon(Icons.videocam),
                       label: const Text('Video'),
                       style: TextButton.styleFrom(
@@ -601,35 +732,91 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                 ],
               ),
 
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
 
-              if (mediaFile != null)
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        mediaEsVideo ? Icons.videocam : Icons.image,
-                        color: primaryBlue,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          mediaFile!.path.split('/').last,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => setState(() => mediaFile = null),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
+              // Botón extra por si el cel no soporta pickMulti en algunos casos
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _pickFotoUna,
+                  icon: const Icon(Icons.add_a_photo),
+                  label: const Text("Agregar 1 foto"),
+                ),
+              ),
+
+              // Preview evidencias nuevas + remotas
+              if (_tieneEvidencias) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    "Evidencias seleccionadas: "
+                    "${_fotos.length} foto(s), ${_videos.length} video(s)"
+                    "${_evidenciasRemotas.isNotEmpty ? " • +${_evidenciasRemotas.length} en el borrador" : ""}",
+                    style: TextStyle(color: Colors.grey.shade700),
                   ),
                 ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    // Fotos nuevas
+                    for (int i = 0; i < _fotos.length; i++)
+                      _chipFile(
+                        icon: Icons.image,
+                        label: _fotos[i].path.split('/').last,
+                        onRemove: () => _removeFoto(i),
+                      ),
+
+                    // Videos nuevos
+                    for (int i = 0; i < _videos.length; i++)
+                      _chipFile(
+                        icon: Icons.videocam,
+                        label: _videos[i].path.split('/').last,
+                        onRemove: () => _removeVideo(i),
+                      ),
+
+                    // Remotas (solo visual, no se eliminan aquí)
+                    for (final ev in _evidenciasRemotas)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: Colors.grey.shade300),
+                          color: Colors.grey.shade100,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              (ev["tipo"]?.toString().toLowerCase().contains(
+                                        "video",
+                                      ) ??
+                                      false)
+                                  ? Icons.videocam
+                                  : Icons.image,
+                              size: 18,
+                              color: Colors.black54,
+                            ),
+                            const SizedBox(width: 8),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 200),
+                              child: Text(
+                                "Borrador: ${(ev["url"] ?? "").toString().split('/').last}",
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.black54),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ],
 
               const SizedBox(height: 15),
 
@@ -652,41 +839,71 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
               _label('Firma'),
               const SizedBox(height: 8),
-              Container(
-                height: 140,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Listener(
-                  onPointerDown: (_) {
-                    if (!_firmaInteractuada) {
-                      setState(() => _firmaInteractuada = true);
-                    }
-                  },
-                  onPointerMove: (_) {
-                    if (!_firmaInteractuada) {
-                      setState(() => _firmaInteractuada = true);
-                    }
-                  },
-                  child: Signature(
-                    controller: signatureController,
-                    backgroundColor: Colors.white,
+
+              // Firma: si ya existe, se bloquea y se muestra imagen
+              if (_firmaBloqueada) ...[
+                Container(
+                  height: 140,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.grey.shade300),
+                    color: Colors.white,
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Image.network(
+                    _firmaUrlRemota!,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Center(
+                      child: Text("No se pudo cargar la firma guardada."),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () {
-                    signatureController.clear();
-                    setState(() => _firmaInteractuada = false);
-                  },
-                  child: const Text('Limpiar firma'),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    "Firma ya registrada (no es necesario firmar nuevamente).",
+                    style: TextStyle(color: Colors.grey.shade700),
+                  ),
                 ),
-              ),
+              ] else ...[
+                Container(
+                  height: 140,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Listener(
+                    onPointerDown: (_) {
+                      if (!_firmaInteractuada) {
+                        setState(() => _firmaInteractuada = true);
+                      }
+                    },
+                    onPointerMove: (_) {
+                      if (!_firmaInteractuada) {
+                        setState(() => _firmaInteractuada = true);
+                      }
+                    },
+                    child: Signature(
+                      controller: signatureController,
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {
+                      signatureController.clear();
+                      setState(() => _firmaInteractuada = false);
+                    },
+                    child: const Text('Limpiar firma'),
+                  ),
+                ),
+              ],
 
               const SizedBox(height: 15),
 

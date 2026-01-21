@@ -147,7 +147,7 @@ class DenunciasRepository {
 
       req.files.add(
         http.MultipartFile.fromBytes(
-          "firma", // ✅ ESTA ES LA CLAVE QUE ESPERA TU BACKEND
+          "firma", // ESTA ES LA CLAVE QUE ESPERA EL BACKEND
           pngBytes,
           filename: "firma.png",
           contentType: http_parser.MediaType("image", "png"),
@@ -323,6 +323,13 @@ class DenunciasRepository {
     final res = await api.get(path);
     if (res is Map) return Map<String, dynamic>.from(res);
     throw Exception("Formato inesperado en /api/denuncias/mapa/");
+  }
+
+  //----------descargas
+  Future<Map<String, dynamic>> getDetalleDenuncia(String denunciaId) async {
+    final res = await api.get("api/denuncias/$denunciaId/detalle/");
+    if (res is Map) return Map<String, dynamic>.from(res);
+    throw Exception("Formato inesperado en detalle denuncia");
   }
 }
 
