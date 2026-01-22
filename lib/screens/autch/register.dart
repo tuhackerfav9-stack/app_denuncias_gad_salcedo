@@ -29,6 +29,36 @@ class _RegisterState extends State<Register> {
 
   bool _soloNumeros(String s) => RegExp(r'^\d+$').hasMatch(s);
 
+  //  Validación de cédula ecuatoriana (persona natural)
+  bool _cedulaEcuatorianaValida(String cedula) {
+    if (cedula.length != 10) return false;
+    if (!_soloNumeros(cedula)) return false;
+
+    final prov = int.parse(cedula.substring(0, 2));
+    if (prov < 1 || prov > 24) return false;
+
+    final tercer = int.parse(cedula[2]);
+    if (tercer < 0 || tercer > 5) return false; // 0-5: natural
+
+    final digits = cedula.split('').map(int.parse).toList();
+
+    int suma = 0;
+    for (int i = 0; i < 9; i++) {
+      int val = digits[i];
+      if (i % 2 == 0) {
+        // posiciones 0,2,4,6,8
+        val *= 2;
+        if (val > 9) val -= 9;
+      }
+      suma += val;
+    }
+
+    final mod = suma % 10;
+    final verificador = mod == 0 ? 0 : 10 - mod;
+
+    return verificador == digits[9];
+  }
+
   Future<void> continuar() async {
     if (!formKey.currentState!.validate()) return;
 
@@ -112,6 +142,9 @@ class _RegisterState extends State<Register> {
                       if (value.isEmpty) return 'La cédula es requerida';
                       if (!_soloNumeros(value)) return 'Solo números';
                       if (value.length != 10) return 'Debe tener 10 dígitos';
+                      if (!_cedulaEcuatorianaValida(value)) {
+                        return 'Cédula ecuatoriana inválida';
+                      }
                       return null;
                     },
                   ),

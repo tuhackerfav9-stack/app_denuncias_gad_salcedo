@@ -6,6 +6,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:signature/signature.dart';
 
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+
 import '../../settings/session.dart';
 import '../../repositories/chatbot_repository.dart';
 
@@ -37,11 +40,11 @@ class _ChatbotScreenState extends State<ChatbotScreen>
 
   final List<_ChatMessage> messages = [];
 
-  // Evidencia
+  // Evidencia (1 adjunto por vez, estilo ChatGPT)
   File? _mediaFile;
   bool _mediaEsVideo = false;
 
-  // Firma (opcional en chat; la dejé como herramienta)
+  // Firma (opcional en chat)
   final SignatureController signatureController = SignatureController(
     penStrokeWidth: 3,
     penColor: Colors.black,
@@ -76,6 +79,19 @@ class _ChatbotScreenState extends State<ChatbotScreen>
     }
   }
 
+  // =========================================================
+  // Persistir archivo seleccionado (evita PathNotFound en cache)
+  // =========================================================
+  Future<File> _persistPickedFile(XFile x) async {
+    final dir = await getApplicationSupportDirectory(); // estable
+    final ext = p.extension(x.path);
+    final name = "evid_${DateTime.now().millisecondsSinceEpoch}$ext";
+    final newPath = p.join(dir.path, name);
+
+    final newFile = await File(x.path).copy(newPath);
+    return newFile;
+  }
+
   // ================== START CHAT ==================
   Future<void> _startChat() async {
     setState(() {
@@ -100,20 +116,20 @@ class _ChatbotScreenState extends State<ChatbotScreen>
 
       final res = await repo.start();
       _convId = res["conversacion_id"]?.toString();
-      _borradorId = null; // start NO crea borrador (como quieres)
+      _borradorId = null;
 
       messages.add(
         _ChatMessage(
           text:
               "Hola 👋 ¿Qué deseas denunciar hoy?\n"
-              "Elige una opción escribiendo el número:\n\n"
-              "1️. Alumbrado público.\n"
-              "2️. Basura / Aseo.\n"
-              "3️. Vías / Baches.\n"
-              "4️. Seguridad.\n"
-              "5️. Ruido.\n"
-              "6. Otros.\n"
-              "Al comenzar la denuncia crearé un borrador donde iré anotando tu denuncia para luego enviarla.",
+              "Puedes escribir el nombre o el número:\n\n"
+              "1. Alumbrado público\n"
+              "2. Basura / Aseo\n"
+              "3. Vías / Baches\n"
+              "4. Seguridad\n"
+              "5. Ruido\n"
+              "6. Otros\n\n"
+              "Luego cuéntame qué pasó y dónde fue 📍",
           isMe: false,
         ),
       );
@@ -138,10 +154,28 @@ class _ChatbotScreenState extends State<ChatbotScreen>
       if (_convId == null || _convId!.isEmpty) return;
     }
 
+    // 👇 Guardamos si había adjunto en este envío (para subirlo después del mensaje)
+    final File? mediaToUpload = _mediaFile;
+    final bool mediaIsVideo = _mediaEsVideo;
+
+    // ✅ Validación: si el archivo ya no existe, no intentes subir
+    if (mediaToUpload != null && !await mediaToUpload.exists()) {
+      _toast("❌ El archivo ya no existe. Vuelve a adjuntar.");
+      return;
+    }
+
     setState(() {
       _sending = true;
+
       messages.add(_ChatMessage(text: text, isMe: true));
       if (overrideText == null) msgController.clear();
+
+      // estilo chat: limpias el adjunto después de enviar
+      if (mediaToUpload != null) {
+        _mediaFile = null;
+        _mediaEsVideo = false;
+      }
+
       messages.add(
         _ChatMessage(text: "Escribiendo...", isMe: false, isTyping: true),
       );
@@ -150,6 +184,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
     _scrollToBottom();
 
     try {
+      // 1) mandamos el texto al bot
       final res = await repo.sendMessage(
         conversacionId: _convId!,
         mensaje: text,
@@ -158,12 +193,34 @@ class _ChatbotScreenState extends State<ChatbotScreen>
       final botText = (res["respuesta"] ?? "").toString().trim();
       final denunciaId = res["denuncia_id"]?.toString();
 
-      // si backend devuelve borrador snapshot -> guardamos id
+      // snapshot borrador
       final borr = res["borrador"];
       if (borr is Map) {
         final id = borr["id"]?.toString();
         if (id != null && id.isNotEmpty && id.toLowerCase() != "null") {
           _borradorId = id;
+        }
+      }
+
+      // 2) si había adjunto, lo subimos AUTOMÁTICO
+      if (mediaToUpload != null) {
+        if (_borradorId == null || _borradorId!.isEmpty) {
+          _toast(
+            "📎 Adjuntado listo. Envía 1 mensaje más para crear borrador.",
+          );
+        } else {
+          final tipo = mediaIsVideo ? "video" : "foto";
+          try {
+            _toast("⏫ Subiendo $tipo...");
+            await repo.subirEvidencia(
+              borradorId: _borradorId!,
+              archivo: mediaToUpload,
+              tipo: tipo,
+            );
+            _toast("✅ Evidencia subida");
+          } catch (e) {
+            _toast("❌ Error subiendo evidencia: $e");
+          }
         }
       }
 
@@ -242,63 +299,84 @@ class _ChatbotScreenState extends State<ChatbotScreen>
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      // tu backend ya parsea lat/lng por regex
       await _sendText("lat: ${pos.latitude} lng: ${pos.longitude}");
     } catch (e) {
       _toast("❌ No se pudo obtener ubicación: $e");
     }
   }
 
-  // ================== EVIDENCIA ==================
+  // ================== EVIDENCIA (GALERÍA + CÁMARA) ==================
   Future<void> _pickFoto() async {
     final picker = ImagePicker();
     final x = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 85,
+      imageQuality: 80,
+      maxWidth: 1280,
+      maxHeight: 1280,
     );
     if (x == null) return;
+
+    final f = await _persistPickedFile(x);
+
     setState(() {
-      _mediaFile = File(x.path);
+      _mediaFile = f;
       _mediaEsVideo = false;
     });
-    _toast("📷 Foto seleccionada");
+    _toast("📷 Foto lista para enviar");
   }
 
   Future<void> _pickVideo() async {
     final picker = ImagePicker();
     final x = await picker.pickVideo(source: ImageSource.gallery);
     if (x == null) return;
+
+    final f = await _persistPickedFile(x);
+
     setState(() {
-      _mediaFile = File(x.path);
+      _mediaFile = f;
       _mediaEsVideo = true;
     });
-    _toast("🎥 Video seleccionado");
+    _toast("🎥 Video listo para enviar");
   }
 
-  Future<void> _subirEvidenciaSeleccionada() async {
-    if (_borradorId == null || _borradorId!.isEmpty) {
-      _toast("⚠️ Aún no hay borrador. Escribe tipo + descripción primero.");
-      return;
-    }
-    if (_mediaFile == null) {
-      _toast("⚠️ Selecciona una foto o video primero.");
-      return;
-    }
+  Future<void> _takeFotoCamera() async {
+    final picker = ImagePicker();
+    final x = await picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 80,
+      maxWidth: 1280,
+      maxHeight: 1280,
+    );
+    if (x == null) return;
 
-    final tipo = _mediaEsVideo ? "video" : "foto";
+    final f = await _persistPickedFile(x);
 
-    try {
-      _toast("⏫ Subiendo $tipo...");
-      await repo.subirEvidencia(
-        borradorId: _borradorId!,
-        archivo: _mediaFile!,
-        tipo: tipo,
-      );
-      _toast("✅ Evidencia subida");
-      setState(() => _mediaFile = null);
-    } catch (e) {
-      _toast("❌ Error subiendo evidencia: $e");
-    }
+    setState(() {
+      _mediaFile = f;
+      _mediaEsVideo = false;
+    });
+    _toast("📷 Foto tomada lista para enviar");
+  }
+
+  Future<void> _takeVideoCamera() async {
+    final picker = ImagePicker();
+    final x = await picker.pickVideo(source: ImageSource.camera);
+    if (x == null) return;
+
+    final f = await _persistPickedFile(x);
+
+    setState(() {
+      _mediaFile = f;
+      _mediaEsVideo = true;
+    });
+    _toast("🎥 Video grabado listo para enviar");
+  }
+
+  void _removeAttachment() {
+    setState(() {
+      _mediaFile = null;
+      _mediaEsVideo = false;
+    });
   }
 
   // ================== FIRMA ==================
@@ -308,9 +386,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
   }
 
   Future<List<int>> _obtenerFirmaBytesObligatoria() async {
-    if (!_firmaValida()) {
-      throw Exception("Firma no válida.");
-    }
+    if (!_firmaValida()) throw Exception("Firma no válida.");
     await Future.delayed(const Duration(milliseconds: 80));
     final png = await signatureController.toPngBytes();
     if (png == null || png.isEmpty) {
@@ -321,7 +397,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
 
   Future<void> _subirFirma() async {
     if (_borradorId == null || _borradorId!.isEmpty) {
-      _toast("⚠️ Aún no hay borrador. Escribe tipo + descripción primero.");
+      _toast("⚠️ Aún no hay borrador. Escribe primero tipo + descripción.");
       return;
     }
 
@@ -337,7 +413,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
     }
   }
 
-  // ================== ATTACHMENTS SHEET ==================
+  // ================== SHEET ADJUNTOS ==================
   void _openAttachmentsSheet() {
     showModalBottomSheet(
       context: context,
@@ -350,43 +426,35 @@ class _ChatbotScreenState extends State<ChatbotScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 _AttachTile(
-                  icon: Icons.my_location,
-                  title: 'Enviar ubicación actual',
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _sendCurrentLocation();
-                  },
-                ),
-                _AttachTile(
-                  icon: Icons.photo,
-                  title: 'Elegir foto',
+                  icon: Icons.photo_library_outlined,
+                  title: 'Elegir foto (Galería)',
                   onTap: () async {
                     Navigator.pop(context);
                     await _pickFoto();
                   },
                 ),
                 _AttachTile(
-                  icon: Icons.videocam,
-                  title: 'Elegir video',
+                  icon: Icons.photo_camera_outlined,
+                  title: 'Tomar foto (Cámara)',
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _takeFotoCamera();
+                  },
+                ),
+                _AttachTile(
+                  icon: Icons.video_library_outlined,
+                  title: 'Elegir video (Galería)',
                   onTap: () async {
                     Navigator.pop(context);
                     await _pickVideo();
                   },
                 ),
                 _AttachTile(
-                  icon: Icons.cloud_upload,
-                  title: 'Subir evidencia (foto/video) al borrador',
+                  icon: Icons.videocam_outlined,
+                  title: 'Grabar video (Cámara)',
                   onTap: () async {
                     Navigator.pop(context);
-                    await _subirEvidenciaSeleccionada();
-                  },
-                ),
-                _AttachTile(
-                  icon: Icons.border_color_outlined,
-                  title: 'Firmar y subir firma',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _openFirmaDialog();
+                    await _takeVideoCamera();
                   },
                 ),
               ],
@@ -447,6 +515,10 @@ class _ChatbotScreenState extends State<ChatbotScreen>
                 Navigator.pop(context);
                 await _subirFirma();
               },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBlue,
+                foregroundColor: Colors.white,
+              ),
               child: const Text("Subir"),
             ),
           ],
@@ -472,10 +544,12 @@ class _ChatbotScreenState extends State<ChatbotScreen>
   // ================== UI ==================
   @override
   Widget build(BuildContext context) {
+    final hasAttachment = _mediaFile != null;
+
     return Scaffold(
       backgroundColor: Colors.white,
 
-      // Drawer (igual a tu estilo)
+      // Drawer (NO TOCAR)
       drawer: Drawer(
         child: SafeArea(
           child: Column(
@@ -529,7 +603,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
         ),
       ),
 
-      // AppBar (igual estética)
+      // AppBar (NO TOCAR)
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -586,7 +660,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
               child: const Center(child: Text("Iniciando conversación...")),
             ),
 
-          // estado mini
+          // estado mini (NO TOCAR)
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
             child: Row(
@@ -606,37 +680,6 @@ class _ChatbotScreenState extends State<ChatbotScreen>
             ),
           ),
 
-          if (_mediaFile != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _mediaEsVideo ? Icons.videocam : Icons.image,
-                      color: primaryBlue,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _mediaFile!.path.split('/').last,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => setState(() => _mediaFile = null),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
           Expanded(
             child: ListView.builder(
               controller: scrollController,
@@ -650,57 +693,140 @@ class _ChatbotScreenState extends State<ChatbotScreen>
             ),
           ),
 
+          // ===== Input “Gemini-like” =====
           SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-              child: Row(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: Container(
+                  // Preview adjunto
+                  if (hasAttachment)
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      margin: const EdgeInsets.only(bottom: 10),
                       decoration: BoxDecoration(
                         color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.grey.shade300),
                       ),
                       child: Row(
                         children: [
-                          IconButton(
-                            onPressed: _openAttachmentsSheet,
-                            icon: const Icon(Icons.attach_file),
-                            color: Colors.grey.shade700,
-                          ),
-                          Expanded(
-                            child: TextField(
-                              focusNode: inputFocus,
-                              controller: msgController,
-                              minLines: 1,
-                              maxLines: 4,
-                              enabled: !_starting,
-                              onSubmitted: (_) => _sendText(),
-                              decoration: const InputDecoration(
-                                hintText: 'Mensaje...',
-                                border: InputBorder.none,
+                          if (!_mediaEsVideo && _mediaFile != null)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.file(
+                                _mediaFile!,
+                                width: 44,
+                                height: 44,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          else
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                _mediaEsVideo ? Icons.videocam : Icons.image,
+                                color: primaryBlue,
                               ),
                             ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _mediaFile!.path.split('/').last,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _removeAttachment,
+                            icon: const Icon(Icons.close),
+                            tooltip: "Quitar adjunto",
                           ),
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
+
+                  // Barra tipo pill
                   Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: (_sending || _starting)
-                          ? Colors.grey
-                          : primaryBlue,
-                      shape: BoxShape.circle,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
                     ),
-                    child: IconButton(
-                      onPressed: (_sending || _starting) ? null : _sendText,
-                      icon: const Icon(Icons.send, color: Colors.white),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        _RoundIconBtn(
+                          icon: Icons.attach_file,
+                          tooltip: "Adjuntar",
+                          onTap: _starting ? null : _openAttachmentsSheet,
+                        ),
+                        const SizedBox(width: 6),
+                        _RoundIconBtn(
+                          icon: Icons.my_location,
+                          tooltip: "Enviar ubicación",
+                          onTap: _starting ? null : _sendCurrentLocation,
+                        ),
+                        const SizedBox(width: 6),
+                        _RoundIconBtn(
+                          icon: Icons.border_color_outlined,
+                          tooltip: "Firma",
+                          onTap: _starting ? null : _openFirmaDialog,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            focusNode: inputFocus,
+                            controller: msgController,
+                            minLines: 1,
+                            maxLines: 4,
+                            enabled: !_starting,
+                            onSubmitted: (_) => _sendText(),
+                            decoration: const InputDecoration(
+                              hintText: 'Escribir mensaje...',
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(
+                                vertical: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: (_sending || _starting) ? null : _sendText,
+                          borderRadius: BorderRadius.circular(999),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: (_sending || _starting)
+                                  ? Colors.grey
+                                  : primaryBlue,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Icon(
+                              Icons.send,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -849,6 +975,40 @@ class _AttachTile extends StatelessWidget {
       ),
       title: Text(title),
       onTap: onTap,
+    );
+  }
+}
+
+class _RoundIconBtn extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  const _RoundIconBtn({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: enabled ? Colors.white : Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Icon(icon, size: 20, color: Colors.grey.shade800),
+        ),
+      ),
     );
   }
 }

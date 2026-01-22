@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../repositories/register_repository.dart';
 
@@ -14,14 +15,40 @@ class _Register2State extends State<Register2> {
   final formKey = GlobalKey<FormState>();
   final correoController = TextEditingController();
 
+  // ✅ NUEVO: cooldown 30s
+  Timer? _timer;
+  int _cooldown = 0;
+
+  bool get _bloqueado => _cooldown > 0;
+
+  void _iniciarCooldown([int segundos = 30]) {
+    _timer?.cancel();
+    setState(() => _cooldown = segundos);
+
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
+      if (_cooldown <= 1) {
+        t.cancel();
+        setState(() => _cooldown = 0);
+      } else {
+        setState(() => _cooldown--);
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _timer?.cancel(); // ✅ NUEVO
     correoController.dispose();
     super.dispose();
   }
 
   Future<void> verificarCorreo() async {
+    if (_bloqueado) return; // ✅ NUEVO: no deja spamear
     if (!formKey.currentState!.validate()) return;
+
+    // ✅ NUEVO: se bloquea 30s desde que toca el botón
+    _iniciarCooldown(30);
 
     // leer args
     final args =
@@ -60,8 +87,7 @@ class _Register2State extends State<Register2> {
       }
 
       // 2) abrir modal y obtener código escrito
-      final codigoIngresado =
-          await _mostrarDialogOTP(); // ahora devuelve String?
+      final codigoIngresado = await _mostrarDialogOTP();
 
       if (codigoIngresado == null) return; // canceló
 
@@ -112,7 +138,7 @@ class _Register2State extends State<Register2> {
             return;
           }
 
-          Navigator.pop(ctx, code); // ✅ devolvemos el código
+          Navigator.pop(ctx, code);
         }
 
         return AlertDialog(
@@ -201,7 +227,7 @@ class _Register2State extends State<Register2> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx, null), // ✅ cancel
+              onPressed: () => Navigator.pop(ctx, null),
               child: const Text('Cancelar'),
             ),
           ],
@@ -233,15 +259,12 @@ class _Register2State extends State<Register2> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 10),
-
                   Image.asset(
                     'assets/logo_gad_municipal_letras.png',
                     height: 95,
                     fit: BoxFit.contain,
                   ),
-
                   const SizedBox(height: 70),
-
                   const Text(
                     'Correo Electrónico',
                     style: TextStyle(
@@ -251,7 +274,6 @@ class _Register2State extends State<Register2> {
                     ),
                   ),
                   const SizedBox(height: 8),
-
                   TextFormField(
                     controller: correoController,
                     keyboardType: TextInputType.emailAddress,
@@ -263,17 +285,15 @@ class _Register2State extends State<Register2> {
                       if (!emailOk.hasMatch(value)) {
                         return 'Ingresa un correo válido';
                       }
-
                       return null;
                     },
                   ),
-
                   const SizedBox(height: 14),
 
                   SizedBox(
                     height: 48,
                     child: TextButton(
-                      onPressed: verificarCorreo,
+                      onPressed: _bloqueado ? null : verificarCorreo, // ✅ NUEVO
                       style: TextButton.styleFrom(
                         backgroundColor: primaryBlue,
                         foregroundColor: Colors.white,
@@ -281,15 +301,30 @@ class _Register2State extends State<Register2> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      child: const Text(
-                        'Verificar Correo',
-                        style: TextStyle(
+                      child: Text(
+                        _bloqueado
+                            ? 'Espera... ($_cooldown s)'
+                            : 'Verificar Correo',
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
                   ),
+
+                  // ✅ NUEVO: texto debajo del botón con contador
+                  if (_bloqueado) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      'Este botón se volverá a activar después de $_cooldown segundos.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
 
                   const SizedBox(height: 18),
 

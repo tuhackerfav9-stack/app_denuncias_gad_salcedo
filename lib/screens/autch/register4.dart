@@ -83,7 +83,12 @@ class _Register4State extends State<Register4> {
     final source = await _elegirFuente();
     if (source == null) return;
 
-    final x = await picker.pickImage(source: source, imageQuality: 85);
+    final x = await picker.pickImage(
+      source: source,
+      imageQuality: 80,
+      maxWidth: 1280,
+      maxHeight: 1280,
+    );
     if (x == null) return;
     setState(() => cedulaFrontal = File(x.path));
   }
@@ -92,7 +97,12 @@ class _Register4State extends State<Register4> {
     final source = await _elegirFuente();
     if (source == null) return;
 
-    final x = await picker.pickImage(source: source, imageQuality: 85);
+    final x = await picker.pickImage(
+      source: source,
+      imageQuality: 80,
+      maxWidth: 1280,
+      maxHeight: 1280,
+    );
     if (x == null) return;
     setState(() => cedulaTrasera = File(x.path));
   }
