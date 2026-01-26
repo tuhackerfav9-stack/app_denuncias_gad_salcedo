@@ -331,6 +331,25 @@ class DenunciasRepository {
     if (res is Map) return Map<String, dynamic>.from(res);
     throw Exception("Formato inesperado en detalle denuncia");
   }
+
+  // =========================
+  // RESPUESTAS DE DENUNCIA
+  // GET /web/api/denuncias/<id>/respuestas/
+  // (o /api/denuncias/<id>/respuestas/ según cómo lo publiques)
+  // =========================
+  Future<Map<String, dynamic>> getRespuestasDenuncia(String denunciaId) async {
+    //  Opción A (RECOMENDADA): endpoint en web (como te propuse)
+    //final res = await api.get("web/api/denuncias/$denunciaId/respuestas/");
+    //final res = await api.get("api/denuncias/$denunciaId/respuestas/");
+    final res = await api.get(
+      "api/denuncias/denuncias/$denunciaId/respuestas/",
+    );
+
+    // Si tu backend devuelve {"success":true,"respuestas":[...]}
+    if (res is Map) return Map<String, dynamic>.from(res);
+
+    throw Exception("Formato inesperado en respuestas denuncia");
+  }
 }
 
 // excepción interna para reintento de multipart tras refresh
