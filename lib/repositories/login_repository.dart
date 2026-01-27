@@ -8,7 +8,7 @@ class LoginRepository {
     final response = await _api.post(
       "api/auth/login/",
       {"correo": correo.trim().toLowerCase(), "password": password},
-      auth: false, // 👈 LOGIN NO usa Bearer
+      auth: false, //  LOGIN NO usa Bearer
     );
 
     // Validación defensiva
@@ -17,13 +17,18 @@ class LoginRepository {
     }
 
     final usuario = response["usuario"];
+    final access = response["access"] as String; // ✅ aquí
+    final refresh = response["refresh"] as String; // ✅ aquí
 
     await Session.saveLogin(
-      access: response["access"],
-      refresh: response["refresh"],
+      access: access,
+      refresh: refresh,
+      //access: response["access"],
+      //refresh: response["refresh"],
       email: usuario["correo"],
       userId: usuario["id"],
       tipo: usuario["tipo"],
     );
+    await Session.updateAccess(access);
   }
 }

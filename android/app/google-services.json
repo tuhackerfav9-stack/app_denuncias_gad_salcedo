@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "262056834582",
+    "project_id": "denuncias-salcedo-18df4",
+    "storage_bucket": "denuncias-salcedo-18df4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:262056834582:android:e5d0fe32406a106a4ca737",
+        "android_client_info": {
+          "package_name": "com.example.app_movil_denuncias"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCGdnAlKlUQi7TDo7xzeLl6VSsJ29Sqwgw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:262056834582:android:70d94861d4faa8dd4ca737",
+        "android_client_info": {
+          "package_name": "com.gad.salcedo.denuncia"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCGdnAlKlUQi7TDo7xzeLl6VSsJ29Sqwgw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:262056834582:android:07050d584999cbc84ca737",
+        "android_client_info": {
+          "package_name": "com.gad.salcedo.denuncias"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCGdnAlKlUQi7TDo7xzeLl6VSsJ29Sqwgw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

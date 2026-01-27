@@ -332,17 +332,11 @@ class DenunciasRepository {
     throw Exception("Formato inesperado en detalle denuncia");
   }
 
-  // =========================
-  // RESPUESTAS DE DENUNCIA
-  // GET /web/api/denuncias/<id>/respuestas/
-  // (o /api/denuncias/<id>/respuestas/ según cómo lo publiques)
-  // =========================
+  // GET /api/denuncias/<id>/respuestas/
   Future<Map<String, dynamic>> getRespuestasDenuncia(String denunciaId) async {
-    //  Opción A (RECOMENDADA): endpoint en web (como te propuse)
-    //final res = await api.get("web/api/denuncias/$denunciaId/respuestas/");
-    //final res = await api.get("api/denuncias/$denunciaId/respuestas/");
     final res = await api.get(
-      "api/denuncias/denuncias/$denunciaId/respuestas/",
+      //"api/denuncias/denuncias/$denunciaId/respuestas/",
+      "api/denuncias/$denunciaId/respuestas/",
     );
 
     // Si tu backend devuelve {"success":true,"respuestas":[...]}

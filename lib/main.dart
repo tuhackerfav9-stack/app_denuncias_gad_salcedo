@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+import 'firebase_options.dart';
+import 'settings/push_service.dart';
+import 'settings/session_guard.dart';
 
 import 'screens/autch/cambiar_password.dart';
 import 'screens/autch/login.dart';
@@ -16,9 +22,25 @@ import 'screens/denuncias/denuncias_screen.dart';
 import 'screens/denuncias/detalle_denuncia_screen.dart';
 import 'screens/denuncias/mapa_denuncias_screen.dart';
 import 'screens/perfil/ciudadano_perfil_screen.dart';
-import 'settings/session_guard.dart';
 
-void main() => runApp(const MyApp());
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  //runApp(const MyApp());
+  //PushService.init();
+
+  await PushService.init();
+  runApp(const MyApp());
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -35,12 +57,6 @@ class MyApp extends StatelessWidget {
         '/register3': (context) => const Register3(),
         '/register4': (context) => const Register4(),
         '/register5': (context) => const Register5(),
-        //'/denuncias': (context) => const DenunciasScreen(),
-        //'/form/denuncias': (context) => const DenunciasFormScreen(),
-        //'/chatbot': (context) => const ChatbotScreen(),
-        //'/mapadenuncias': (context) => const MapaDenunciasScreen(),
-        //'/perfil': (context) => const CiudadanoPerfilScreen(),
-        //'/ayuda': (context) => const AyudaScreen(),
         '/denuncias': (context) => SessionGuard(child: const DenunciasScreen()),
         '/form/denuncias': (context) =>
             SessionGuard(child: const DenunciasFormScreen()),

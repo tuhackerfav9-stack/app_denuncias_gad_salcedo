@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'api_connection.dart';
+
 class Session {
   static const _kAccess = "access";
   static const _kRefresh = "refresh";
@@ -60,6 +62,22 @@ class Session {
   static Future<void> updateAccess(String access) async {
     final sp = await SharedPreferences.getInstance();
     await sp.setString(_kAccess, access);
+    //final pending = await Session.pendingFcmToken();
+    //if (pending != null && pending.isNotEmpty) {
+    //  await ApiConnection.instance.post("api/notificaciones/token/", {
+    //    "fcm_token": pending,
+    //    "platform": "android",
+    //  }, auth: true);
+    //  await Session.clearPendingFcmToken();
+    //}
+    final pending = await Session.pendingFcmToken();
+    if (pending != null && pending.isNotEmpty) {
+      await ApiConnection.instance.post("api/notificaciones/token/", {
+        "fcm_token": pending,
+        "platform": "android",
+      }, auth: true);
+      await Session.clearPendingFcmToken();
+    }
   }
 
   // Si tu backend devuelve refresh nuevo (a veces), lo actualizas
@@ -76,5 +94,22 @@ class Session {
     await sp.remove(_kEmail);
     await sp.remove(_kUserId);
     await sp.remove(_kUserTipo);
+  }
+
+  static const _pendingFcmKey = "pending_fcm_token";
+
+  static Future<void> setPendingFcmToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pendingFcmKey, token);
+  }
+
+  static Future<String?> pendingFcmToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_pendingFcmKey);
+  }
+
+  static Future<void> clearPendingFcmToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pendingFcmKey);
   }
 }
