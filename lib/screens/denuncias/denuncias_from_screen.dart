@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:awesome_dialog/awesome_dialog.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,6 +9,9 @@ import 'package:signature/signature.dart';
 
 import '../../settings/session.dart';
 import '../../repositories/denuncias_repository.dart';
+
+//  Manejo global de errores
+import '../../settings/api_exception.dart';
 
 class DenunciasFormScreen extends StatefulWidget {
   const DenunciasFormScreen({super.key});
@@ -18,6 +22,7 @@ class DenunciasFormScreen extends StatefulWidget {
 
 class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
   static const Color primaryBlue = Color(0xFF2C64C4);
+  static const Color cancelGrey = Color(0xFF9E9E9E);
 
   final formKey = GlobalKey<FormState>();
   bool _enviando = false;
@@ -38,6 +43,19 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     'Ruido',
     'Otro',
   ];
+
+  // para el color
+  Widget _blueHeader(IconData icon) {
+    return Container(
+      width: 70,
+      height: 70,
+      decoration: const BoxDecoration(
+        color: primaryBlue,
+        shape: BoxShape.circle,
+      ),
+      child: Center(child: Icon(icon, color: Colors.white, size: 36)),
+    );
+  }
 
   // Mapa/Ubicación
   GoogleMapController? mapController;
@@ -105,6 +123,115 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
   }
 
   // =========================
+  // DIALOGS PRO (AwesomeDialog)
+  // =========================
+  void _dlgOk({required String title, required String desc}) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+
+      // HEADER AZUL
+      customHeader: _blueHeader(Icons.check_circle_outline),
+
+      btnOkText: "Listo",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+    ).show();
+  }
+
+  void _dlgError({required String title, required String desc}) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+
+      // HEADER AZUL (no rojo)
+      customHeader: _blueHeader(Icons.error_outline),
+
+      btnOkText: "Entendido",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+    ).show();
+  }
+
+  void _dlgInfo({required String title, required String desc}) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+
+      customHeader: _blueHeader(Icons.info_outline),
+
+      btnOkText: "Ok",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+    ).show();
+  }
+
+  void _dlgConfirm({
+    required String title,
+    required String desc,
+    required VoidCallback onOk,
+  }) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+
+      // ✅ HEADER AZUL
+      customHeader: _blueHeader(Icons.help_outline),
+
+      // ✅ BOTONES CON TU PALETA
+      btnCancelText: "Cancelar",
+      btnOkText: "Sí, enviar",
+      btnCancelColor: cancelGrey,
+      btnOkColor: primaryBlue,
+
+      btnCancelOnPress: () {},
+      btnOkOnPress: onOk,
+    ).show();
+  }
+
+  // Mapea ApiException -> dialog + acciones (401 manda a login)
+  Future<void> _handleApiException(ApiException e) async {
+    if (!mounted) return;
+
+    switch (e.type) {
+      case ApiErrorType.unauthorized:
+        _dlgInfo(title: "Sesión expirada", desc: e.message);
+        await Session.clear();
+        if (!mounted) return;
+        Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
+        return;
+
+      case ApiErrorType.forbidden:
+        _dlgError(title: "Sin permisos", desc: e.message);
+        return;
+
+      case ApiErrorType.network:
+        _dlgError(title: "Sin conexión", desc: e.message);
+        return;
+
+      case ApiErrorType.timeout:
+        _dlgError(title: "Tiempo de espera", desc: e.message);
+        return;
+
+      case ApiErrorType.server:
+        _dlgError(title: "Servidor con problemas", desc: e.message);
+        return;
+
+      case ApiErrorType.unknown:
+        _dlgError(title: "Error", desc: e.message);
+        return;
+    }
+  }
+
+  // =========================
   // Precarga edición
   // =========================
   void _precargarDesdeBorrador(Map<String, dynamic> b) {
@@ -143,7 +270,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     }
 
     // ===== Firma remota (bloquea canvas) =====
-    // puede venir como firma_url directo o firma: {firma_url: ...}
     final firmaUrl =
         (b["firma_url"] ?? b["firmaUrl"] ?? b["url_firma"])?.toString() ??
         (b["firma"] is Map
@@ -159,11 +285,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     // ===== Evidencias remotas =====
     _evidenciasRemotas.clear();
 
-    final raw =
-        b["evidencias"] ??
-        b["evidencia"] ??
-        b["media"] ??
-        (b["results"] ?? null);
+    final raw = b["evidencias"] ?? b["evidencia"] ?? b["media"] ?? b["results"];
 
     List list = [];
     if (raw is List) {
@@ -207,27 +329,33 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
   // Ubicación
   // =========================
   Future<void> _initUbicacion() async {
-    final ok = await _permisosUbicacion();
-    if (!ok) return;
+    try {
+      final ok = await _permisosUbicacion();
+      if (!ok) return;
 
-    final pos = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
 
-    setState(() {
-      currentPosition = pos;
+      if (!mounted) return;
+      setState(() {
+        currentPosition = pos;
 
-      if (puntoDenuncia == null) {
-        puntoDenuncia = LatLng(pos.latitude, pos.longitude);
-        markers = {
-          Marker(
-            markerId: const MarkerId('denuncia'),
-            position: puntoDenuncia!,
-            infoWindow: const InfoWindow(title: 'Lugar de denuncia'),
-          ),
-        };
-      }
-    });
+        if (puntoDenuncia == null) {
+          puntoDenuncia = LatLng(pos.latitude, pos.longitude);
+          markers = {
+            Marker(
+              markerId: const MarkerId('denuncia'),
+              position: puntoDenuncia!,
+              infoWindow: const InfoWindow(title: 'Lugar de denuncia'),
+            ),
+          };
+        }
+      });
+    } catch (_) {
+      // Si algo raro pasa con GPS, no bloqueamos
+      _snack('No se pudo obtener ubicación. Intenta nuevamente.');
+    }
   }
 
   Future<bool> _permisosUbicacion() async {
@@ -343,7 +471,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
       return;
     }
 
-    // Firma obligatoria SOLO si no hay firma remota
     if (!_firmaBloqueada && !_firmaValida()) {
       _snack('Firma antes de enviar');
       return;
@@ -356,8 +483,18 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
       _snack("Tipo de denuncia inválido");
       return;
     }
-    final tipoId = idx + 1;
 
+    //  Confirmación PRO
+    _dlgConfirm(
+      title: _modoEditarBorrador ? "Guardar cambios" : "Enviar denuncia",
+      desc: _modoEditarBorrador
+          ? "¿Deseas guardar los cambios del borrador?"
+          : "¿Deseas enviar esta denuncia ahora?",
+      onOk: () async => await _denunciarReal(idx + 1),
+    );
+  }
+
+  Future<void> _denunciarReal(int tipoId) async {
     final lat = puntoDenuncia!.latitude;
     final lng = puntoDenuncia!.longitude;
 
@@ -431,10 +568,24 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         );
       }
 
-      _snack(" Denuncia enviada correctamente.");
-
       if (!mounted) return;
+
+      _dlgOk(
+        title: "Listo",
+        desc: _modoEditarBorrador
+            ? "Cambios guardados correctamente."
+            : "Denuncia enviada correctamente.",
+      );
+
       Navigator.pushNamedAndRemoveUntil(context, '/denuncias', (r) => false);
+    } on ApiException catch (e) {
+      // ROLLBACK si creó borrador en este envío
+      if (borradorCreadoEnEsteEnvio && borradorIdFinal.isNotEmpty) {
+        try {
+          await repo.eliminarBorrador(borradorIdFinal);
+        } catch (_) {}
+      }
+      await _handleApiException(e);
     } catch (e) {
       // ROLLBACK si creó borrador en este envío
       if (borradorCreadoEnEsteEnvio && borradorIdFinal.isNotEmpty) {
@@ -442,7 +593,8 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
           await repo.eliminarBorrador(borradorIdFinal);
         } catch (_) {}
       }
-      _snack("❌ Error: $e");
+      if (!mounted) return;
+      _dlgError(title: "No se pudo enviar", desc: e.toString());
     } finally {
       if (mounted) setState(() => _enviando = false);
     }
@@ -703,7 +855,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
               _label('Subir evidencias (fotos y/o videos)'),
               const SizedBox(height: 8),
 
-              // Botones (multiples)
               Row(
                 children: [
                   Expanded(
@@ -734,7 +885,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
               const SizedBox(height: 8),
 
-              // Botón extra por si el cel no soporta pickMulti en algunos casos
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
@@ -744,7 +894,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                 ),
               ),
 
-              // Preview evidencias nuevas + remotas
               if (_tieneEvidencias) ...[
                 const SizedBox(height: 8),
                 Align(
@@ -761,23 +910,18 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    // Fotos nuevas
                     for (int i = 0; i < _fotos.length; i++)
                       _chipFile(
                         icon: Icons.image,
                         label: _fotos[i].path.split('/').last,
                         onRemove: () => _removeFoto(i),
                       ),
-
-                    // Videos nuevos
                     for (int i = 0; i < _videos.length; i++)
                       _chipFile(
                         icon: Icons.videocam,
                         label: _videos[i].path.split('/').last,
                         onRemove: () => _removeVideo(i),
                       ),
-
-                    // Remotas (solo visual, no se eliminan aquí)
                     for (final ev in _evidenciasRemotas)
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -840,7 +984,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
               _label('Firma'),
               const SizedBox(height: 8),
 
-              // Firma: si ya existe, se bloquea y se muestra imagen
               if (_firmaBloqueada) ...[
                 Container(
                   height: 140,
@@ -917,7 +1060,11 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                     foregroundColor: Colors.white,
                   ),
                   child: Text(
-                    _modoEditarBorrador ? 'Guardar cambios' : 'Denunciar',
+                    _enviando
+                        ? "Enviando..."
+                        : (_modoEditarBorrador
+                              ? 'Guardar cambios'
+                              : 'Denunciar'),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:awesome_dialog/awesome_dialog.dart';
 
 import '../../settings/session.dart';
 import '../../repositories/perfil_repository.dart';
 import '../../models/perfil_model.dart';
+
+//  Manejo global de errores
+import '../../settings/api_exception.dart';
 
 class CiudadanoPerfilScreen extends StatefulWidget {
   const CiudadanoPerfilScreen({super.key});
@@ -13,6 +17,7 @@ class CiudadanoPerfilScreen extends StatefulWidget {
 
 class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
   static const Color primaryBlue = Color(0xFF2C64C4);
+  static const Color cancelGrey = Color(0xFF9E9E9E);
 
   final formKey = GlobalKey<FormState>();
   int currentIndex = 0;
@@ -77,6 +82,118 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
     if (index == 3) Navigator.pushNamed(context, '/mapadenuncias');
   }
 
+  // =========================
+  // DIALOGS PRO (AwesomeDialog) - con tu paleta
+  // =========================
+  Widget _blueHeader(IconData icon) {
+    return Container(
+      width: 70,
+      height: 70,
+      decoration: const BoxDecoration(
+        color: primaryBlue,
+        shape: BoxShape.circle,
+      ),
+      child: Center(child: Icon(icon, color: Colors.white, size: 36)),
+    );
+  }
+
+  void _dlgOk({required String title, required String desc}) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      headerAnimationLoop: false,
+      customHeader: _blueHeader(Icons.check_circle_outline),
+      btnOkText: "Listo",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+    ).show();
+  }
+
+  void _dlgError({required String title, required String desc}) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      headerAnimationLoop: false,
+      customHeader: _blueHeader(Icons.error_outline),
+      btnOkText: "Entendido",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+    ).show();
+  }
+
+  void _dlgInfo({required String title, required String desc}) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      headerAnimationLoop: false,
+      customHeader: _blueHeader(Icons.info_outline),
+      btnOkText: "Ok",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+    ).show();
+  }
+
+  void _dlgConfirm({
+    required String title,
+    required String desc,
+    required VoidCallback onOk,
+  }) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      headerAnimationLoop: false,
+      customHeader: _blueHeader(Icons.help_outline),
+      btnCancelText: "Cancelar",
+      btnOkText: "Sí, guardar",
+      btnCancelColor: cancelGrey,
+      btnOkColor: primaryBlue,
+      btnCancelOnPress: () {},
+      btnOkOnPress: onOk,
+    ).show();
+  }
+
+  // Mapea ApiException -> dialog + acciones (401 manda a login)
+  Future<void> _handleApiException(ApiException e) async {
+    if (!mounted) return;
+
+    switch (e.type) {
+      case ApiErrorType.unauthorized:
+        _dlgInfo(title: "Sesión expirada", desc: e.message);
+        await Session.clear();
+        if (!mounted) return;
+        Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
+        return;
+
+      case ApiErrorType.forbidden:
+        _dlgError(title: "Sin permisos", desc: e.message);
+        return;
+
+      case ApiErrorType.network:
+        _dlgError(title: "Sin conexión", desc: e.message);
+        return;
+
+      case ApiErrorType.timeout:
+        _dlgError(title: "Tiempo de espera", desc: e.message);
+        return;
+
+      case ApiErrorType.server:
+        _dlgError(title: "Servidor con problemas", desc: e.message);
+        return;
+
+      case ApiErrorType.unknown:
+        _dlgError(title: "Error", desc: e.message);
+        return;
+    }
+  }
+
   Future<void> _loadPerfil() async {
     setState(() => _loading = true);
 
@@ -110,8 +227,10 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
         'correo': correoController.text,
         'fecha': fechaNacController.text,
       };
+    } on ApiException catch (e) {
+      await _handleApiException(e);
     } catch (e) {
-      _snack("❌ No se pudo cargar el perfil: $e");
+      _dlgError(title: "No se pudo cargar", desc: e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -170,30 +289,45 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
     final cambiosClave = _huboCambiosContrasena();
 
     if (!cambiosPerfil && !cambiosClave) {
-      _snack('No hay cambios para guardar');
+      _dlgInfo(title: "Sin cambios", desc: "No hay cambios para guardar.");
       return;
     }
 
     // Validación extra si cambia contraseña
     if (cambiarContrasena) {
       if (passActualController.text.trim().isEmpty) {
-        _snack('Ingresa tu contraseña actual');
+        _dlgInfo(title: "Falta un dato", desc: "Ingresa tu contraseña actual.");
         return;
       }
       if (passNuevaController.text.trim().length < 6) {
-        _snack('La nueva contraseña debe tener mínimo 6 caracteres');
+        _dlgInfo(
+          title: "Contraseña débil",
+          desc: "La nueva contraseña debe tener mínimo 6 caracteres.",
+        );
         return;
       }
       if (passNuevaController.text.trim() !=
           passConfirmarController.text.trim()) {
-        _snack('La confirmación no coincide');
+        _dlgInfo(title: "No coincide", desc: "La confirmación no coincide.");
         return;
       }
     }
 
+    // Confirmación con tu paleta
+    _dlgConfirm(
+      title: "Guardar cambios",
+      desc: "¿Deseas guardar los cambios del perfil?",
+      onOk: () async => await _guardarReal(),
+    );
+  }
+
+  Future<void> _guardarReal() async {
     setState(() => _saving = true);
 
     try {
+      final cambiosPerfil = _huboCambiosPerfil();
+      //final cambiosClave = _huboCambiosContrasena();//la comento con el fin de ver como actua el flujo si no se rompe
+
       // 1) actualizar perfil (PATCH) solo si cambió algo
       if (cambiosPerfil && _perfil != null) {
         final nombres = nombresController.text.trim();
@@ -219,9 +353,11 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
         );
       }
 
-      _snack("✅ Cambios guardados");
+      if (!mounted) return;
 
-      // refrescar perfil (para mantener consistencia)
+      _dlgOk(title: "Listo", desc: "Cambios guardados correctamente.");
+
+      // refrescar perfil
       await _loadPerfil();
 
       // limpiar zona contraseña
@@ -231,15 +367,14 @@ class _CiudadanoPerfilScreenState extends State<CiudadanoPerfilScreen> {
         passNuevaController.clear();
         passConfirmarController.clear();
       });
+    } on ApiException catch (e) {
+      await _handleApiException(e);
     } catch (e) {
-      _snack("❌ Error guardando: $e");
+      if (!mounted) return;
+      _dlgError(title: "Error guardando", desc: e.toString());
     } finally {
       if (mounted) setState(() => _saving = false);
     }
-  }
-
-  void _snack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override

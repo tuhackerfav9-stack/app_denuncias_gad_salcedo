@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:awesome_dialog/awesome_dialog.dart';
 
-// Ajusta el import según tu estructura
 import '../../repositories/register_repository.dart';
+import '../../settings/api_exception.dart';
+import '../../settings/session.dart';
 
 class Register4 extends StatefulWidget {
   const Register4({super.key});
@@ -26,63 +28,137 @@ class _Register4State extends State<Register4> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-
-    //  Recupera el uid del borrador desde argumentos
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is Map) {
       final uid = args["uid"]?.toString();
-      if (uid != null && uid.isNotEmpty) {
-        _uid = uid;
-      }
+      if (uid != null && uid.isNotEmpty) _uid = uid;
     }
   }
 
+  // =========================
+  // DIALOGOS PRO
+  // =========================
+  Widget _header(IconData icon) {
+    return Container(
+      width: 70,
+      height: 70,
+      decoration: const BoxDecoration(
+        color: primaryBlue,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(icon, color: Colors.white, size: 36),
+    );
+  }
+
+  void _dlgInfo(String title, String desc) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      btnOkText: "Ok",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+      customHeader: _header(Icons.info_outline),
+    ).show();
+  }
+
+  void _dlgError(String title, String desc) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      btnOkText: "Entendido",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+      customHeader: _header(Icons.error_outline),
+    ).show();
+  }
+
+  Future<void> _handleApiError(ApiException e) async {
+    if (!mounted) return;
+
+    switch (e.type) {
+      case ApiErrorType.network:
+        _dlgError("Sin conexión", "Revisa tu conexión a internet.");
+        break;
+
+      case ApiErrorType.timeout:
+        _dlgError(
+          "Tiempo agotado",
+          "El servidor no respondió. Intenta nuevamente.",
+        );
+        break;
+
+      case ApiErrorType.unauthorized:
+        await Session.clear();
+        if (!mounted) return;
+        _dlgInfo(
+          "Sesión expirada",
+          "Tu sesión no es válida. Inicia sesión nuevamente.",
+        );
+        Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
+        break;
+
+      case ApiErrorType.forbidden:
+        _dlgError("Acceso denegado", e.message);
+        break;
+
+      case ApiErrorType.server:
+        _dlgError("Servidor no disponible", "Intenta nuevamente más tarde.");
+        break;
+
+      case ApiErrorType.unknown:
+        _dlgError("Error", e.message);
+        break;
+    }
+  }
+
+  // =========================
+  // PICK IMAGEN
+  // =========================
   Future<ImageSource?> _elegirFuente() async {
     return showModalBottomSheet<ImageSource>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      builder: (_) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 6),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade400,
-                    borderRadius: BorderRadius.circular(50),
-                  ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(50),
                 ),
-                const SizedBox(height: 14),
-                ListTile(
-                  leading: const Icon(Icons.photo_library),
-                  title: const Text('Galería'),
-                  onTap: () => Navigator.pop(context, ImageSource.gallery),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.photo_camera),
-                  title: const Text('Cámara'),
-                  onTap: () => Navigator.pop(context, ImageSource.camera),
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
+              ),
+              const SizedBox(height: 14),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Galería'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera),
+                title: const Text('Cámara'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
   Future<void> _pickFrontal() async {
     final source = await _elegirFuente();
     if (source == null) return;
-
     final x = await picker.pickImage(
       source: source,
       imageQuality: 80,
@@ -96,7 +172,6 @@ class _Register4State extends State<Register4> {
   Future<void> _pickTrasera() async {
     final source = await _elegirFuente();
     if (source == null) return;
-
     final x = await picker.pickImage(
       source: source,
       imageQuality: 80,
@@ -107,14 +182,12 @@ class _Register4State extends State<Register4> {
     setState(() => cedulaTrasera = File(x.path));
   }
 
+  // =========================
+  // SUBIR DOCUMENTOS
+  // =========================
   Future<void> subir() async {
-    // 1) Validaciones
     if (_uid == null || _uid!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Error: no se encontró el uid del registro.'),
-        ),
-      );
+      _dlgError("Error", "No se encontró el UID del registro.");
       return;
     }
 
@@ -122,14 +195,13 @@ class _Register4State extends State<Register4> {
       final faltan = <String>[];
       if (cedulaFrontal == null) faltan.add('frontal');
       if (cedulaTrasera == null) faltan.add('trasera');
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Falta subir la parte: ${faltan.join(' y ')}')),
+      _dlgInfo(
+        "Documentos incompletos",
+        "Falta subir la parte: ${faltan.join(' y ')}",
       );
       return;
     }
 
-    // 2) Subida real
     setState(() => _subiendo = true);
 
     try {
@@ -147,15 +219,12 @@ class _Register4State extends State<Register4> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Documentos guardados ✅')));
 
-      // Mantén el uid para el paso 5
       Navigator.pushNamed(context, '/register5', arguments: {"uid": _uid});
+    } on ApiException catch (e) {
+      await _handleApiError(e);
     } catch (e) {
       if (!mounted) return;
-
-      // Si tu repo lanza Exception con "detail", aquí se mostrará el mensaje del backend
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      _dlgError("Error inesperado", e.toString());
     } finally {
       if (mounted) setState(() => _subiendo = false);
     }
@@ -238,45 +307,13 @@ class _Register4State extends State<Register4> {
                             ),
                           )
                         : const Text(
-                            'subir',
+                            'Subir',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                   ),
-                ),
-
-                const SizedBox(height: 18),
-
-                Text.rich(
-                  TextSpan(
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 11.5,
-                    ),
-                    children: const [
-                      TextSpan(
-                        text: 'Al hacer clic en continuar, aceptas nuestros ',
-                      ),
-                      TextSpan(
-                        text: 'Términos de\nServicio',
-                        style: TextStyle(
-                          color: Colors.black87,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      TextSpan(text: ' y nuestra '),
-                      TextSpan(
-                        text: 'Política de Privacidad',
-                        style: TextStyle(
-                          color: Colors.black87,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  textAlign: TextAlign.center,
                 ),
 
                 const SizedBox(height: 70),
@@ -295,7 +332,9 @@ class _Register4State extends State<Register4> {
   }
 }
 
-// ====== WIDGET CARD ======
+// =========================
+// CARD CÉDULA (SIN CAMBIOS)
+// =========================
 class _CedulaCard extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -343,7 +382,6 @@ class _CedulaCard extends StatelessWidget {
                   : null,
             ),
             const SizedBox(width: 12),
-
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -375,7 +413,6 @@ class _CedulaCard extends StatelessWidget {
                 ],
               ),
             ),
-
             if (file != null)
               IconButton(onPressed: onRemove, icon: const Icon(Icons.close)),
           ],

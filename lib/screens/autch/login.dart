@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:awesome_dialog/awesome_dialog.dart';
+
 import '../../repositories/login_repository.dart';
+
+//  Manejo global de errores
+import '../../settings/api_exception.dart';
+import '../../settings/session.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -10,6 +16,7 @@ class Login extends StatefulWidget {
 
 class _LoginState extends State<Login> {
   static const Color primaryBlue = Color(0xFF2C64C4);
+  //static const Color cancelGrey = Color(0xFF9E9E9E);
 
   final formKey = GlobalKey<FormState>();
   final emailController = TextEditingController();
@@ -23,6 +30,84 @@ class _LoginState extends State<Login> {
     emailController.dispose();
     passController.dispose();
     super.dispose();
+  }
+
+  // =========================
+  // DIALOGS PRO (AwesomeDialog)
+  // =========================
+  Widget _blueHeader(IconData icon) {
+    return Container(
+      width: 70,
+      height: 70,
+      decoration: const BoxDecoration(
+        color: primaryBlue,
+        shape: BoxShape.circle,
+      ),
+      child: Center(child: Icon(icon, color: Colors.white, size: 36)),
+    );
+  }
+
+  void _dlgError({required String title, required String desc}) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      dialogType: DialogType.error,
+      title: title,
+      desc: desc,
+      headerAnimationLoop: false,
+      customHeader: _blueHeader(Icons.error_outline),
+      btnOkText: "Entendido",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+    ).show();
+  }
+
+  void _dlgInfo({required String title, required String desc}) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      dialogType: DialogType.info,
+      title: title,
+      desc: desc,
+      headerAnimationLoop: false,
+      customHeader: _blueHeader(Icons.info_outline),
+      btnOkText: "Ok",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+    ).show();
+  }
+
+  Future<void> _handleApiException(ApiException e) async {
+    if (!mounted) return;
+
+    switch (e.type) {
+      case ApiErrorType.unauthorized:
+        _dlgInfo(title: "Sesión expirada", desc: e.message);
+        await Session.clear();
+        if (!mounted) return;
+        Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
+        return;
+
+      case ApiErrorType.forbidden:
+        _dlgError(title: "Sin permisos", desc: e.message);
+        return;
+
+      case ApiErrorType.network:
+        _dlgError(title: "Sin conexión", desc: e.message);
+        return;
+
+      case ApiErrorType.timeout:
+        _dlgError(title: "Tiempo de espera", desc: e.message);
+        return;
+
+      case ApiErrorType.server:
+        _dlgError(title: "Servidor con problemas", desc: e.message);
+        return;
+
+      case ApiErrorType.unknown:
+        _dlgError(title: "Error", desc: e.message);
+        return;
+    }
   }
 
   Future<void> _continuar() async {
@@ -40,19 +125,18 @@ class _LoginState extends State<Login> {
 
       if (!mounted) return;
 
-      //  Login OK -> ir a denuncias
-      //Navigator.pushReplacementNamed(context, '/denuncias');
+      // Login OK -> ir a denuncias con bienvenida
       Navigator.pushReplacementNamed(
         context,
         '/denuncias',
         arguments: {'showWelcome': true},
       );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      await _handleApiException(e);
     } catch (e) {
       if (!mounted) return;
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      _dlgError(title: "No se pudo iniciar sesión", desc: e.toString());
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -114,7 +198,6 @@ class _LoginState extends State<Login> {
                       if (!ok.hasMatch(value)) {
                         return 'Ingresa un correo válido';
                       }
-
                       return null;
                     },
                   ),

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:awesome_dialog/awesome_dialog.dart';
+
 import '../../repositories/password_reset_repository.dart';
+import '../../settings/api_exception.dart';
+import '../../settings/session.dart';
 
 class RecuperarPassword extends StatefulWidget {
   const RecuperarPassword({super.key});
@@ -26,6 +30,79 @@ class _RecuperarPasswordState extends State<RecuperarPassword> {
 
   bool _soloNumeros(String s) => RegExp(r'^\d+$').hasMatch(s);
 
+  // =========================
+  // DIALOGOS PRO (mismo estilo/paleta)
+  // =========================
+  Widget _header(IconData icon) {
+    return Container(
+      width: 70,
+      height: 70,
+      decoration: const BoxDecoration(
+        color: primaryBlue,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(icon, color: Colors.white, size: 36),
+    );
+  }
+
+  void _dlg(String title, String desc, IconData icon) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      btnOkText: "Ok",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+      customHeader: _header(icon),
+    ).show();
+  }
+
+  Future<void> _handleApiError(ApiException e) async {
+    if (!mounted) return;
+
+    switch (e.type) {
+      case ApiErrorType.network:
+        _dlg("Sin conexión", "Revisa tu conexión a internet.", Icons.wifi_off);
+        break;
+
+      case ApiErrorType.timeout:
+        _dlg(
+          "Tiempo agotado",
+          "El servidor no respondió. Intenta nuevamente.",
+          Icons.access_time,
+        );
+        break;
+
+      case ApiErrorType.unauthorized:
+        await Session.clear();
+        if (!mounted) return;
+        _dlg(
+          "Sesión expirada",
+          "Tu sesión no es válida. Inicia sesión nuevamente.",
+          Icons.lock_outline,
+        );
+        Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
+        break;
+
+      case ApiErrorType.forbidden:
+        _dlg("Acceso denegado", e.message, Icons.block);
+        break;
+
+      case ApiErrorType.server:
+        _dlg(
+          "Servidor no disponible",
+          "Intenta nuevamente más tarde.",
+          Icons.cloud_off,
+        );
+        break;
+
+      case ApiErrorType.unknown:
+        _dlg("Error", e.message, Icons.help_outline);
+        break;
+    }
+  }
+
   Future<void> enviarCodigo() async {
     if (!formKey.currentState!.validate()) return;
 
@@ -45,19 +122,19 @@ class _RecuperarPasswordState extends State<RecuperarPassword> {
       final resetId = (resp["reset_id"] ?? "").toString();
       final devCodigo = (resp["dev_codigo"] ?? "").toString();
 
-      // Siempre mostramos el detail
+      // Siempre mostramos el detail (igual que antes)
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(detail)));
 
-      // Si es DEV, mostramos el código
+      // Si es DEV, mostramos el código (igual que antes)
       if (devCodigo.isNotEmpty) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("✅ Código (DEV): $devCodigo")));
       }
 
-      // Si no vino reset_id (por seguridad backend puede devolver 200 sin reset_id)
+      // Si no vino reset_id (igual que antes)
       if (resetId.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -75,11 +152,11 @@ class _RecuperarPasswordState extends State<RecuperarPassword> {
           "correo": correoController.text.trim(),
         },
       );
+    } on ApiException catch (e) {
+      await _handleApiError(e);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      _dlg("Error inesperado", e.toString(), Icons.help_outline);
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -141,6 +218,7 @@ class _RecuperarPasswordState extends State<RecuperarPassword> {
                       return null;
                     },
                   ),
+
                   const SizedBox(height: 18),
 
                   const Text(

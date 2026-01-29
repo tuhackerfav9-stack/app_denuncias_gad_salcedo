@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:awesome_dialog/awesome_dialog.dart';
+
 import '../../repositories/register_repository.dart';
+import '../../settings/api_exception.dart';
+import '../../settings/session.dart';
 
 class Register2 extends StatefulWidget {
   const Register2({super.key});
@@ -43,6 +47,83 @@ class _Register2State extends State<Register2> {
     super.dispose();
   }
 
+  // =========================
+  // DIALOGOS PRO (MISMA PALETA)
+  // =========================
+  Widget _header(IconData icon) {
+    return Container(
+      width: 70,
+      height: 70,
+      decoration: const BoxDecoration(
+        color: primaryBlue,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(icon, color: Colors.white, size: 36),
+    );
+  }
+
+  void _dlgInfo(String title, String desc) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      btnOkText: "Ok",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+      customHeader: _header(Icons.info_outline),
+    ).show();
+  }
+
+  void _dlgError(String title, String desc) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      btnOkText: "Entendido",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+      customHeader: _header(Icons.error_outline),
+    ).show();
+  }
+
+  void _handleApiError(ApiException e) async {
+    if (!mounted) return;
+
+    switch (e.type) {
+      case ApiErrorType.network:
+        _dlgError("Sin conexión", "Revisa tu conexión a internet.");
+        break;
+
+      case ApiErrorType.timeout:
+        _dlgError("Tiempo agotado", "El servidor no respondió a tiempo.");
+        break;
+
+      case ApiErrorType.unauthorized:
+        await Session.clear();
+        if (!mounted) return;
+        _dlgInfo(
+          "Sesión inválida",
+          "Tu sesión no es válida. Inicia nuevamente.",
+        );
+        Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
+        break;
+
+      case ApiErrorType.forbidden:
+        _dlgError("Acceso denegado", e.message);
+        break;
+
+      case ApiErrorType.server:
+        _dlgError("Servidor no disponible", "Intenta nuevamente más tarde.");
+        break;
+
+      case ApiErrorType.unknown:
+        _dlgError("Error", e.message);
+        break;
+    }
+  }
+
   Future<void> verificarCorreo() async {
     if (_bloqueado) return; // ✅ NUEVO: no deja spamear
     if (!formKey.currentState!.validate()) return;
@@ -57,9 +138,7 @@ class _Register2State extends State<Register2> {
     final uid = (args['uid'] ?? '').toString();
 
     if (uid.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('❌ No llegó el UID del registro')),
-      );
+      _dlgError("Error", "No llegó el UID del registro.");
       return;
     }
 
@@ -75,6 +154,7 @@ class _Register2State extends State<Register2> {
       // En DEV tu backend devuelve dev_codigo (solo para pruebas)
       final devCodigo = (resp['dev_codigo'] ?? '').toString();
       if (!mounted) return;
+
       if (devCodigo.isNotEmpty) {
         // opcional: mostrarlo para pruebas rápidas
         ScaffoldMessenger.of(context).showSnackBar(
@@ -98,11 +178,11 @@ class _Register2State extends State<Register2> {
 
       // 4) pasar a register3 con uid
       Navigator.pushNamed(context, '/register3', arguments: {'uid': uid});
+    } on ApiException catch (e) {
+      _handleApiError(e);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('❌ Error: $e')));
+      _dlgError("Error inesperado", e.toString());
     }
   }
 
@@ -293,7 +373,7 @@ class _Register2State extends State<Register2> {
                   SizedBox(
                     height: 48,
                     child: TextButton(
-                      onPressed: _bloqueado ? null : verificarCorreo, // ✅ NUEVO
+                      onPressed: _bloqueado ? null : verificarCorreo,
                       style: TextButton.styleFrom(
                         backgroundColor: primaryBlue,
                         foregroundColor: Colors.white,
@@ -313,7 +393,6 @@ class _Register2State extends State<Register2> {
                     ),
                   ),
 
-                  // ✅ NUEVO: texto debajo del botón con contador
                   if (_bloqueado) ...[
                     const SizedBox(height: 10),
                     Text(

@@ -67,6 +67,9 @@ dependencies:
   firebase_messaging: ^15.0.0
   flutter_local_notifications: ^17.2.0
 
+  #mensajes alet
+  awesome_dialog: ^3.2.1
+
 
 
 
@@ -98,8 +101,9 @@ flutter:
   #   - images/a_dot_ham.jpeg
   assets:
    - assets/
-   - assets/foto_menu.png
-   - assets/LOGO_GAD_MUNICIPAL_SALCEDO.png
+   - assets/errors/
+    #- assets/foto_menu.png
+   #- assets/LOGO_GAD_MUNICIPAL_SALCEDO.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

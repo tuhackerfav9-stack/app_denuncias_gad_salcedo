@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:awesome_dialog/awesome_dialog.dart';
+
 import '../../repositories/denuncias_repository.dart';
 import '../../settings/session.dart';
 import '../../models/denuncia_model.dart';
+
+//   (manejo global)
+import '../error_view.dart';
+import '../../settings/api_exception.dart';
 
 class DenunciasScreen extends StatefulWidget {
   const DenunciasScreen({super.key});
@@ -12,14 +18,18 @@ class DenunciasScreen extends StatefulWidget {
 
 class _DenunciasScreenState extends State<DenunciasScreen> {
   static const Color primaryBlue = Color(0xFF2C64C4);
-
+  static const Color cancelGrey = Color(0xFF9E9E9E);
   int currentIndex = 0;
   final repo = DenunciasRepository();
 
-  late Future<_DenunciasData> _future;
+  //   NUEVO: control de carga + error (para ErrorView)
+  bool _loading = true;
+  ApiException? _error;
+  _DenunciasData? _data;
+
   bool _welcomeShown = false;
 
-  // ✅ NUEVO: Mapa local para mostrar nombre en vez de "Tipo #"
+  //   NUEVO: Mapa local para mostrar nombre en vez de "Tipo #"
   static const List<String> _tipos = [
     'Alumbrado público',
     'Basura / Aseo',
@@ -109,21 +119,52 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
   @override
   void initState() {
     super.initState();
-    _future = _loadAll();
+    cargar(); //   NUEVO: ya no FutureBuilder
   }
 
-  Future<_DenunciasData> _loadAll() async {
-    final borradoresRes = await repo
-        .getBorradoresMios(); // {finalizados_auto, borradores:[]}
-    final denuncias = await repo.getMias(); // List<DenunciaModel>
-    return _DenunciasData(borradoresRes: borradoresRes, denuncias: denuncias);
+  //   NUEVO: carga centralizada con ApiException
+  Future<void> cargar() async {
+    if (!mounted) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final borradoresRes = await repo.getBorradoresMios();
+      final denuncias = await repo.getMias();
+      final data = _DenunciasData(
+        borradoresRes: borradoresRes,
+        denuncias: denuncias,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _data = data;
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = ApiException(
+          type: ApiErrorType.unknown,
+          message: "Ocurrió un error inesperado.",
+          raw: e.toString(),
+        );
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _refresh() async {
-    setState(() {
-      _future = _loadAll();
-    });
-    await _future;
+    await cargar();
   }
 
   // Navegación inferior (NO TOCAR)
@@ -136,27 +177,115 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
     if (index == 3) Navigator.pushNamed(context, '/mapadenuncias');
   }
 
-  void _snack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  // =========================
+  // DIALOGS PRO (AwesomeDialog) - con tu paleta
+  // =========================
+
+  Widget _blueHeader(IconData icon) {
+    return Container(
+      width: 70,
+      height: 70,
+      decoration: const BoxDecoration(
+        color: primaryBlue,
+        shape: BoxShape.circle,
+      ),
+      child: Center(child: Icon(icon, color: Colors.white, size: 36)),
+    );
+  }
+
+  void _okDialog(String title, String desc) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      headerAnimationLoop: false,
+
+      // ✅ Header azul
+      customHeader: _blueHeader(Icons.check_circle_outline),
+
+      btnOkText: "Listo",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+    ).show();
+  }
+
+  void _errorDialog(String title, String desc) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      headerAnimationLoop: false,
+
+      // ✅ Header azul (no rojo)
+      customHeader: _blueHeader(Icons.error_outline),
+
+      btnOkText: "Entendido",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+    ).show();
+  }
+
+  void _confirmDialog({
+    required String title,
+    required String desc,
+    required VoidCallback onOk,
+  }) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      headerAnimationLoop: false,
+
+      // ✅ Header azul (no amarillo)
+      customHeader: _blueHeader(Icons.help_outline),
+
+      btnCancelText: "Cancelar",
+      btnOkText: "Sí, continuar",
+      btnCancelColor: cancelGrey,
+      btnOkColor: primaryBlue,
+
+      btnCancelOnPress: () {},
+      btnOkOnPress: onOk,
+    ).show();
   }
 
   Future<void> _finalizarBorrador(String id) async {
     try {
       final res = await repo.finalizarBorrador(id);
-      _snack("✅ ${res['detail'] ?? 'Borrador finalizado'}");
+      if (!mounted) return;
+
+      _okDialog(
+        "Denuncia enviada",
+        (res['detail'] ?? "Borrador finalizado").toString(),
+      );
       await _refresh();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+
+      // si es error “global”, mejor pantalla completa al recargar, pero aquí damos un dialog rápido
+      _errorDialog("No se pudo enviar", e.message);
     } catch (e) {
-      _snack("❌ Error finalizando: $e");
+      if (!mounted) return;
+      _errorDialog("No se pudo enviar", e.toString());
     }
   }
 
   Future<void> _eliminarBorrador(String id) async {
     try {
       await repo.eliminarBorrador(id);
-      _snack("🗑️ Borrador eliminado");
+      if (!mounted) return;
+
+      _okDialog("Borrador eliminado", "Se eliminó correctamente.");
       await _refresh();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _errorDialog("No se pudo eliminar", e.message);
     } catch (e) {
-      _snack("❌ Error eliminando: $e");
+      if (!mounted) return;
+      _errorDialog("No se pudo eliminar", e.toString());
     }
   }
 
@@ -169,7 +298,7 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
     final tipoId = b["tipo_denuncia_id"];
     final expSeg = (b["expira_en_seg"] ?? 0);
 
-    // ✅ NUEVO: Nombre en vez de #id
+    //   NUEVO: Nombre en vez de #id
     final tipoNombre = _tipoNombreDesdeId(tipoId);
 
     showModalBottomSheet(
@@ -201,7 +330,6 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
               ),
               const SizedBox(height: 10),
 
-              // ✅ CAMBIO: ya no "Tipo: #$tipoId"
               Text("Tipo: $tipoNombre"),
 
               const SizedBox(height: 6),
@@ -239,7 +367,12 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         Navigator.pop(context);
-                        await _finalizarBorrador(id);
+
+                        _confirmDialog(
+                          title: "Enviar denuncia",
+                          desc: "¿Deseas enviar este borrador ahora?",
+                          onOk: () async => await _finalizarBorrador(id),
+                        );
                       },
                       icon: const Icon(Icons.send),
                       label: const Text("Enviar ya"),
@@ -257,7 +390,12 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
                 child: TextButton.icon(
                   onPressed: () async {
                     Navigator.pop(context);
-                    await _eliminarBorrador(id);
+
+                    _confirmDialog(
+                      title: "Eliminar borrador",
+                      desc: "Esta acción no se puede deshacer. ¿Eliminar?",
+                      onOk: () async => await _eliminarBorrador(id),
+                    );
                   },
                   icon: const Icon(Icons.delete_outline),
                   label: const Text("Eliminar borrador"),
@@ -415,6 +553,23 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
 
   @override
   Widget build(BuildContext context) {
+    //   NUEVO: si hay error global, mostramos ErrorView (pantalla completa)
+    if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: true,
+          iconTheme: const IconThemeData(color: primaryBlue),
+          title: const Text(
+            "Mis Denuncias",
+            style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
+          ),
+        ),
+        body: ErrorView(error: _error!, onRetry: cargar),
+      );
+    }
+
     return Scaffold(
       // Drawer (NO TOCAR)
       drawer: Drawer(
@@ -512,176 +667,17 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
         ],
       ),
 
-      // BODY PRO (aquí sí tocamos)
       body: RefreshIndicator(
         onRefresh: _refresh,
-        child: FutureBuilder<_DenunciasData>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return ListView(
-                children: [
-                  const SizedBox(height: 120),
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        "Error cargando datos:\n${snapshot.error}",
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            }
-
-            final data = snapshot.data!;
-            final borradores =
-                (data.borradoresRes["borradores"] as List?) ?? [];
-            final finalizadosAuto = data.borradoresRes["finalizados_auto"] ?? 0;
-            final denuncias = data.denuncias;
-
-            // Para que RefreshIndicator funcione aunque esté vacío
-            if (borradores.isEmpty && denuncias.isEmpty) {
-              return ListView(
+        child: _loading
+            ? ListView(
                 children: const [
-                  SizedBox(height: 120),
-                  Center(child: Text("Aún no tienes denuncias, registra una.")),
+                  SizedBox(height: 140),
+
+                  Center(child: CircularProgressIndicator()),
                 ],
-              );
-            }
-
-            return ListView(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              children: [
-                // BORRADORES
-                _sectionTitle(
-                  "Denuncias en Revición",
-                  subtitle: finalizadosAuto != 0
-                      ? "(auto-finalizados: $finalizadosAuto)"
-                      : null,
-                ),
-                if (borradores.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Text("No tienes denuncias recientes."),
-                  )
-                else
-                  ...borradores.map((raw) {
-                    final b = Map<String, dynamic>.from(raw as Map);
-                    final expSeg = (b["expira_en_seg"] ?? 0);
-                    final desc = (b["descripcion"] ?? "").toString();
-                    final tipoId = b["tipo_denuncia_id"];
-
-                    //  CAMBIO: Nombre en vez de "#"
-                    final tipoNombre = _tipoNombreDesdeId(tipoId);
-
-                    return _cardShell(
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                tipoNombre, // ✅ aquí
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                            _chip(
-                              text: "procesando denuncia",
-                              bg: Colors.orange.shade50,
-                              fg: Colors.orange.shade800,
-                            ),
-                          ],
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text("Expira revición en: $expSeg seg"),
-                              const SizedBox(height: 6),
-                              Text(
-                                desc,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => _showPreviewBorrador(b),
-                      ),
-                    );
-                  }),
-
-                const SizedBox(height: 8),
-                const Divider(),
-
-                // DENUNCIAS FINALES
-                _sectionTitle("Denuncias enviadas"),
-                if (denuncias.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Text("Aún no tienes denuncias registradas."),
-                  )
-                else
-                  ...denuncias.map((d) {
-                    final tipoTxt =
-                        (d.tipoDenunciaNombre != null &&
-                            d.tipoDenunciaNombre!.trim().isNotEmpty)
-                        ? d.tipoDenunciaNombre!
-                        : _tipoNombreDesdeId(d.tipoDenunciaId);
-
-                    return _cardShell(
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        title: Text(
-                          tipoTxt,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Text("Estado: "),
-                                  _estadoChip(d.estado),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                d.descripcion,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => _showPreviewDenuncia(d),
-                      ),
-                    );
-                  }),
-
-                const SizedBox(height: 80),
-              ],
-            );
-          },
-        ),
+              )
+            : _buildContent(),
       ),
 
       // FAB (NO TOCAR, solo refrescar al volver)
@@ -714,6 +710,153 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
           BottomNavigationBarItem(icon: Icon(Icons.map), label: "mapa"),
         ],
       ),
+    );
+  }
+
+  Widget _buildContent() {
+    final data = _data;
+
+    if (data == null) {
+      // raro, pero por seguridad
+      return ListView(
+        children: const [
+          SizedBox(height: 120),
+          Center(child: Text("No se pudo cargar la información.")),
+        ],
+      );
+    }
+
+    final borradores = (data.borradoresRes["borradores"] as List?) ?? [];
+    final finalizadosAuto = data.borradoresRes["finalizados_auto"] ?? 0;
+    final denuncias = data.denuncias;
+
+    if (borradores.isEmpty && denuncias.isEmpty) {
+      return ListView(
+        children: const [
+          SizedBox(height: 120),
+          Center(child: Text("Aún no tienes denuncias, registra una.")),
+        ],
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      children: [
+        // BORRADORES
+        _sectionTitle(
+          "Denuncias en Revición",
+          subtitle: finalizadosAuto != 0
+              ? "(auto-finalizados: $finalizadosAuto)"
+              : null,
+        ),
+        if (borradores.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Text("No tienes denuncias recientes."),
+          )
+        else
+          ...borradores.map((raw) {
+            final b = Map<String, dynamic>.from(raw as Map);
+            final expSeg = (b["expira_en_seg"] ?? 0);
+            final desc = (b["descripcion"] ?? "").toString();
+            final tipoId = b["tipo_denuncia_id"];
+
+            final tipoNombre = _tipoNombreDesdeId(tipoId);
+
+            return _cardShell(
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        tipoNombre,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    _chip(
+                      text: "procesando denuncia",
+                      bg: Colors.orange.shade50,
+                      fg: Colors.orange.shade800,
+                    ),
+                  ],
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Expira revición en: $expSeg seg"),
+                      const SizedBox(height: 6),
+                      Text(desc, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _showPreviewBorrador(b),
+              ),
+            );
+          }),
+
+        const SizedBox(height: 8),
+        const Divider(),
+
+        // DENUNCIAS FINALES
+        _sectionTitle("Denuncias enviadas"),
+        if (denuncias.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Text("Aún no tienes denuncias registradas."),
+          )
+        else
+          ...denuncias.map((d) {
+            final tipoTxt =
+                (d.tipoDenunciaNombre != null &&
+                    d.tipoDenunciaNombre!.trim().isNotEmpty)
+                ? d.tipoDenunciaNombre!
+                : _tipoNombreDesdeId(d.tipoDenunciaId);
+
+            return _cardShell(
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                title: Text(
+                  tipoTxt,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text("Estado: "),
+                          _estadoChip(d.estado),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        d.descripcion,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _showPreviewDenuncia(d),
+              ),
+            );
+          }),
+
+        const SizedBox(height: 80),
+      ],
     );
   }
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:awesome_dialog/awesome_dialog.dart';
 
-// Ajusta el import según tu estructura
 import '../../repositories/register_repository.dart';
+import '../../settings/api_exception.dart';
+import '../../settings/session.dart';
 
 class Register5 extends StatefulWidget {
   const Register5({super.key});
@@ -42,6 +44,86 @@ class _Register5State extends State<Register5> {
     super.dispose();
   }
 
+  // =========================
+  // DIALOGOS PRO (mismo estilo)
+  // =========================
+  Widget _header(IconData icon) {
+    return Container(
+      width: 70,
+      height: 70,
+      decoration: const BoxDecoration(
+        color: primaryBlue,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(icon, color: Colors.white, size: 36),
+    );
+  }
+
+  void _dlgInfo(String title, String desc) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      btnOkText: "Ok",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+      customHeader: _header(Icons.info_outline),
+    ).show();
+  }
+
+  void _dlgError(String title, String desc) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      btnOkText: "Entendido",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+      customHeader: _header(Icons.error_outline),
+    ).show();
+  }
+
+  Future<void> _handleApiError(ApiException e) async {
+    if (!mounted) return;
+
+    switch (e.type) {
+      case ApiErrorType.network:
+        _dlgError("Sin conexión", "Revisa tu conexión a internet.");
+        break;
+
+      case ApiErrorType.timeout:
+        _dlgError(
+          "Tiempo agotado",
+          "El servidor no respondió. Intenta nuevamente.",
+        );
+        break;
+
+      case ApiErrorType.unauthorized:
+        await Session.clear();
+        if (!mounted) return;
+        _dlgInfo(
+          "Sesión expirada",
+          "Tu sesión no es válida. Inicia sesión nuevamente.",
+        );
+        Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
+        break;
+
+      case ApiErrorType.forbidden:
+        _dlgError("Acceso denegado", e.message);
+        break;
+
+      case ApiErrorType.server:
+        _dlgError("Servidor no disponible", "Intenta nuevamente más tarde.");
+        break;
+
+      case ApiErrorType.unknown:
+        _dlgError("Error", e.message);
+        break;
+    }
+  }
+
   Future<void> iniciar() async {
     if (!formKey.currentState!.validate()) return;
 
@@ -55,11 +137,7 @@ class _Register5State extends State<Register5> {
     }
 
     if (_uid == null || _uid!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Error: no se encontró el uid del registro.'),
-        ),
-      );
+      _dlgError("Error", "No se encontró el uid del registro.");
       return;
     }
 
@@ -75,24 +153,20 @@ class _Register5State extends State<Register5> {
 
       if (!mounted) return;
 
-      // resp puede traer {detail, usuario_id}
       final detail = (resp["detail"] ?? "Registro completo ✅").toString();
 
+      // éxito: mantenemos SnackBar como tú lo tenías
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(detail)));
 
-      // Recomendado: volver a Login para iniciar sesión ya con correo/password
+      // volver a login
       Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
-
-      // Si tú quieres mandarlo directo a denuncias, haz esto:
-      // Navigator.pushNamedAndRemoveUntil(context, '/denuncias', (r) => false);
-      // (pero recuerda: aun no hay login automático, así que SessionGuard te puede sacar)
+    } on ApiException catch (e) {
+      await _handleApiError(e);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      _dlgError("Error inesperado", e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
     }

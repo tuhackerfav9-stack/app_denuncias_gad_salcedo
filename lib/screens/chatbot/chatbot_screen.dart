@@ -22,6 +22,165 @@ class ChatbotScreen extends StatefulWidget {
 class _ChatbotScreenState extends State<ChatbotScreen>
     with WidgetsBindingObserver {
   static const Color primaryBlue = Color(0xFF2C64C4);
+  // ================== ERRORES (HTTP + INTERNET) ==================
+  bool _containsAny(String s, List<String> keys) =>
+      keys.any((k) => s.contains(k));
+
+  String _extractStatus(String msg) {
+    // intenta encontrar 401/403/422/500/503 en el texto de Exception
+    final m = RegExp(r'\b(401|403|422|500|503)\b').firstMatch(msg);
+    return m?.group(1) ?? "";
+  }
+
+  Future<void> _showErrorDialog({
+    required String title,
+    required String message,
+    String? code,
+    IconData icon = Icons.error_outline,
+  }) async {
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(icon, color: primaryBlue),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                code == null || code.isEmpty ? title : "$title ($code)",
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cerrar"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleApiError(Object e) async {
+    final msg = e.toString();
+
+    // ✅ Sin internet / DNS / socket
+    if (e is SocketException ||
+        _containsAny(msg.toLowerCase(), [
+          "socketexception",
+          "failed host lookup",
+          "network is unreachable",
+          "no address associated",
+          "connection refused",
+        ])) {
+      await _showErrorDialog(
+        title: "Sin conexión",
+        code: "",
+        icon: Icons.wifi_off,
+        message:
+            "No tienes internet o la red está fallando.\n\n"
+            "• Revisa Wi-Fi/Datos\n"
+            "• Intenta de nuevo",
+      );
+      return;
+    }
+
+    // ✅ Timeout
+    if (e is TimeoutException || msg.toLowerCase().contains("timeout")) {
+      await _showErrorDialog(
+        title: "Tiempo de espera",
+        icon: Icons.timer_outlined,
+        message:
+            "El servidor tardó demasiado en responder.\n\n"
+            "Intenta nuevamente en unos segundos.",
+      );
+      return;
+    }
+
+    // ✅ Códigos HTTP detectados en el mensaje
+    final code = _extractStatus(msg);
+
+    if (code == "401") {
+      await _showErrorDialog(
+        title: "Sesión expirada",
+        code: "401",
+        icon: Icons.lock_outline,
+        message:
+            "Tu sesión ya no es válida.\n\n"
+            "Vuelve a iniciar sesión.",
+      );
+      // opcional: forzar logout
+      await Session.clear();
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
+      return;
+    }
+
+    if (code == "403") {
+      await _showErrorDialog(
+        title: "No autorizado",
+        code: "403",
+        icon: Icons.block,
+        message:
+            "No tienes permisos para realizar esta acción.\n\n"
+            "Si crees que es un error, contacta al administrador.",
+      );
+      return;
+    }
+
+    if (code == "422") {
+      await _showErrorDialog(
+        title: "Datos no válidos",
+        code: "422",
+        icon: Icons.rule_folder_outlined,
+        message:
+            "Los datos están correctos en forma, pero fallan reglas de negocio.\n\n"
+            "Revisa lo que escribiste (tipo, descripción, ubicación o evidencia).",
+      );
+      return;
+    }
+
+    if (code == "503") {
+      await _showErrorDialog(
+        title: "Servicio no disponible",
+        code: "503",
+        icon: Icons.cloud_off_outlined,
+        message:
+            "El servidor está caído o en mantenimiento.\n\n"
+            "Intenta más tarde.",
+      );
+      return;
+    }
+
+    if (code == "500") {
+      await _showErrorDialog(
+        title: "Error del servidor",
+        code: "500",
+        icon: Icons.dns_outlined,
+        message:
+            "Ocurrió un error interno en el servidor.\n\n"
+            "Intenta nuevamente.",
+      );
+      return;
+    }
+
+    // ✅ Desconocido (?)
+    await _showErrorDialog(
+      title: "Error desconocido",
+      code: "",
+      icon: Icons.help_outline,
+      message:
+          "Ocurrió un error inesperado.\n\n"
+          "Detalle: $msg",
+    );
+  }
 
   final repo = ChatbotRepository();
 
@@ -138,7 +297,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
       _scrollToBottom();
     } catch (e) {
       setState(() => _starting = false);
-      _toast("❌ No se pudo iniciar el chat: $e");
+      await _handleApiError(e);
     }
   }
 
@@ -219,7 +378,8 @@ class _ChatbotScreenState extends State<ChatbotScreen>
             );
             _toast("✅ Evidencia subida");
           } catch (e) {
-            _toast("❌ Error subiendo evidencia: $e");
+            //_toast(" Error subiendo evidencia: $e");
+            await _handleApiError(e);
           }
         }
       }
@@ -249,7 +409,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
         messages.removeWhere((m) => m.isTyping);
         messages.add(
           _ChatMessage(
-            text: "❌ Error enviando mensaje: $e",
+            text: "❌ Error enviando mensaje",
             isMe: false,
             isError: true,
           ),
@@ -257,6 +417,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
         _sending = false;
       });
       _scrollToBottom();
+      await _handleApiError(e);
     }
   }
 
@@ -409,7 +570,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
       signatureController.clear();
       setState(() => _firmaInteractuada = false);
     } catch (e) {
-      _toast("❌ Error firma: $e");
+      await _handleApiError(e);
     }
   }
 

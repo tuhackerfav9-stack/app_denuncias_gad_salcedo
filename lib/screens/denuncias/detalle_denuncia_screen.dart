@@ -19,15 +19,16 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
   // Constantes / estado base
   // =========================
   static const Color primaryBlue = Color(0xFF2C64C4);
+
   int currentIndex = 0;
 
-  // ✅ Repo + estado detalle real
+  //   Repo + estado detalle real
   final repo = DenunciasRepository();
   Map<String, dynamic>? _detalle;
   bool _loading = true;
   String? _error;
 
-  // ✅ Respuestas
+  //   Respuestas
   List<Map<String, dynamic>> _respuestas = [];
   bool _loadingResp = false;
   String? _errorResp;
@@ -252,7 +253,7 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
   }
 
   // =========================
-  // UI Respuestas (DENTRO del State ✅)
+  // UI Respuestas (DENTRO del State  )
   // =========================
   Widget _respuestasSection(String denunciaId) {
     String fmt(dynamic v) {
@@ -952,7 +953,7 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
 
             const SizedBox(height: 14),
 
-            // ✅ Respuestas (debajo del PDF)
+            //   Respuestas (debajo del PDF)
             _respuestasSection(id.toString()),
 
             const SizedBox(height: 80),
@@ -1055,8 +1056,10 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
               onTap: () async {
                 Navigator.pop(context);
                 await Session.clear();
-                if (!context.mounted) return;
-                Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
+                if (!mounted) return;
+                Navigator.of(
+                  context,
+                ).pushNamedAndRemoveUntil('/', (r) => false);
               },
             ),
             const SizedBox(height: 10),

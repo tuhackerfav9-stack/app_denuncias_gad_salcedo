@@ -1,7 +1,7 @@
 class DenunciaModel {
   final String id;
   final int? tipoDenunciaId;
-  final String? tipoDenunciaNombre; // por si el backend luego manda nombre
+  final String? tipoDenunciaNombre;
   final String estado;
   final String descripcion;
   final double latitud;

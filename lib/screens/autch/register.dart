@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:awesome_dialog/awesome_dialog.dart';
+
 import '../../repositories/register_repository.dart';
+import '../../settings/api_exception.dart';
+import '../../settings/session.dart';
 
 class Register extends StatefulWidget {
   const Register({super.key});
@@ -18,6 +22,8 @@ class _RegisterState extends State<Register> {
   final apellidosController = TextEditingController();
   final telefonoController = TextEditingController();
 
+  bool _loading = false;
+
   @override
   void dispose() {
     cedulaController.dispose();
@@ -29,7 +35,7 @@ class _RegisterState extends State<Register> {
 
   bool _soloNumeros(String s) => RegExp(r'^\d+$').hasMatch(s);
 
-  //  Validación de cédula ecuatoriana (persona natural)
+  // Validación cédula ecuatoriana
   bool _cedulaEcuatorianaValida(String cedula) {
     if (cedula.length != 10) return false;
     if (!_soloNumeros(cedula)) return false;
@@ -38,7 +44,7 @@ class _RegisterState extends State<Register> {
     if (prov < 1 || prov > 24) return false;
 
     final tercer = int.parse(cedula[2]);
-    if (tercer < 0 || tercer > 5) return false; // 0-5: natural
+    if (tercer < 0 || tercer > 5) return false;
 
     final digits = cedula.split('').map(int.parse).toList();
 
@@ -46,7 +52,6 @@ class _RegisterState extends State<Register> {
     for (int i = 0; i < 9; i++) {
       int val = digits[i];
       if (i % 2 == 0) {
-        // posiciones 0,2,4,6,8
         val *= 2;
         if (val > 9) val -= 9;
       }
@@ -55,31 +60,71 @@ class _RegisterState extends State<Register> {
 
     final mod = suma % 10;
     final verificador = mod == 0 ? 0 : 10 - mod;
-
     return verificador == digits[9];
   }
 
+  // =========================
+  // DIALOGOS PRO
+  // =========================
+  void _dlgInfo(String title, String desc) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      btnOkText: "Ok",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+      customHeader: _header(Icons.info_outline),
+    ).show();
+  }
+
+  void _dlgError(String title, String desc) {
+    AwesomeDialog(
+      context: context,
+      animType: AnimType.scale,
+      title: title,
+      desc: desc,
+      btnOkText: "Entendido",
+      btnOkColor: primaryBlue,
+      btnOkOnPress: () {},
+      customHeader: _header(Icons.error_outline),
+    ).show();
+  }
+
+  Widget _header(IconData icon) {
+    return Container(
+      width: 70,
+      height: 70,
+      decoration: const BoxDecoration(
+        color: primaryBlue,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(icon, color: Colors.white, size: 36),
+    );
+  }
+
+  // =========================
+  // CONTINUAR
+  // =========================
   Future<void> continuar() async {
     if (!formKey.currentState!.validate()) return;
+    if (_loading) return;
+
+    setState(() => _loading = true);
 
     final repo = RegisterRepository();
 
     try {
-      // loading simple (sin cambiar tu estilo)
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Guardando datos...')));
-
       final uid = await repo.paso1(
-        cedula: cedulaController.text,
-        nombres: nombresController.text,
-        apellidos: apellidosController.text,
-        telefono: telefonoController.text,
+        cedula: cedulaController.text.trim(),
+        nombres: nombresController.text.trim(),
+        apellidos: apellidosController.text.trim(),
+        telefono: telefonoController.text.trim(),
       );
 
       if (!mounted) return;
 
-      // Siguiente pantalla: mandamos UID y (si quieres) los datos
       Navigator.pushNamed(
         context,
         '/register2',
@@ -91,14 +136,54 @@ class _RegisterState extends State<Register> {
           'telefono': telefonoController.text.trim(),
         },
       );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+
+      switch (e.type) {
+        case ApiErrorType.network:
+          _dlgError("Sin conexión", "Revisa tu conexión a internet.");
+          break;
+
+        case ApiErrorType.timeout:
+          _dlgError("Tiempo agotado", "El servidor no respondió a tiempo.");
+          break;
+
+        case ApiErrorType.unauthorized:
+          await Session.clear();
+          if (!mounted) return;
+
+          _dlgInfo(
+            "Sesión inválida",
+            "Tu sesión no es válida. Inicia nuevamente.",
+          );
+
+          if (!mounted) return;
+          Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false);
+          break;
+
+        case ApiErrorType.forbidden:
+          _dlgError("Acceso denegado", e.message);
+          break;
+
+        case ApiErrorType.server:
+          _dlgError("Servidor no disponible", "Intenta nuevamente más tarde.");
+          break;
+
+        case ApiErrorType.unknown:
+          _dlgError("Error", e.message);
+          break;
+      }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('❌ Error: $e')));
+      _dlgError("Error inesperado", e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
+  // =========================
+  // UI
+  // =========================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -114,7 +199,6 @@ class _RegisterState extends State<Register> {
                 children: [
                   const SizedBox(height: 10),
 
-                  // LOGO ARRIBA
                   Image.asset(
                     'assets/logo_gad_municipal_letras.png',
                     height: 95,
@@ -123,20 +207,11 @@ class _RegisterState extends State<Register> {
 
                   const SizedBox(height: 24),
 
-                  // Cédula
-                  const Text(
-                    'Cédula de identidad',
-                    style: TextStyle(
-                      color: primaryBlue,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
+                  _label('Cédula de identidad'),
+                  _input(
                     controller: cedulaController,
+                    hint: 'ej.1234567890',
                     keyboardType: TextInputType.number,
-                    decoration: _inputDecoration(hint: 'ej.1234567890'),
                     validator: (v) {
                       final value = (v ?? '').trim();
                       if (value.isEmpty) return 'La cédula es requerida';
@@ -151,66 +226,33 @@ class _RegisterState extends State<Register> {
 
                   const SizedBox(height: 16),
 
-                  // Nombres
-                  const Text(
-                    'Nombres',
-                    style: TextStyle(
-                      color: primaryBlue,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
+                  _label('Nombres'),
+                  _input(
                     controller: nombresController,
-                    decoration: _inputDecoration(hint: 'ej.Juan Santiago'),
-                    validator: (v) {
-                      final value = (v ?? '').trim();
-                      if (value.isEmpty) return 'Los nombres son requeridos';
-                      if (value.length < 2) return 'Muy corto';
-                      return null;
-                    },
+                    hint: 'ej. Juan Santiago',
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Los nombres son requeridos'
+                        : null,
                   ),
 
                   const SizedBox(height: 16),
 
-                  // Apellidos
-                  const Text(
-                    'Apellidos',
-                    style: TextStyle(
-                      color: primaryBlue,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
+                  _label('Apellidos'),
+                  _input(
                     controller: apellidosController,
-                    decoration: _inputDecoration(hint: 'ej. Alcocer Cando'),
-                    validator: (v) {
-                      final value = (v ?? '').trim();
-                      if (value.isEmpty) return 'Los apellidos son requeridos';
-                      if (value.length < 2) return 'Muy corto';
-                      return null;
-                    },
+                    hint: 'ej. Alcocer Cando',
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Los apellidos son requeridos'
+                        : null,
                   ),
 
                   const SizedBox(height: 16),
 
-                  // Teléfono
-                  const Text(
-                    'Teléfono',
-                    style: TextStyle(
-                      color: primaryBlue,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
+                  _label('Teléfono'),
+                  _input(
                     controller: telefonoController,
+                    hint: 'ej. 0900000000',
                     keyboardType: TextInputType.phone,
-                    decoration: _inputDecoration(hint: 'ej.0900000000'),
                     validator: (v) {
                       final value = (v ?? '').trim();
                       if (value.isEmpty) return 'El teléfono es requerido';
@@ -220,34 +262,36 @@ class _RegisterState extends State<Register> {
                     },
                   ),
 
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 18),
 
-                  // Botón Registrarme
                   SizedBox(
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: continuar,
+                      onPressed: _loading ? null : continuar,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryBlue,
-                        elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      child: const Text(
-                        'Registrarme',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: _loading
+                          ? const CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            )
+                          : const Text(
+                              'Registrarme',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                     ),
                   ),
 
                   const SizedBox(height: 22),
 
-                  // Ilustración abajo
                   Image.asset(
                     'assets/logo_gad_municipal_claro animacion.png',
                     height: 110,
@@ -262,28 +306,33 @@ class _RegisterState extends State<Register> {
     );
   }
 
-  static InputDecoration _inputDecoration({required String hint}) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: TextStyle(color: Colors.grey.shade500),
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: Colors.grey.shade300),
+  Widget _label(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: primaryBlue,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
       ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: primaryBlue, width: 1.4),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Colors.red, width: 1.2),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Colors.red, width: 1.2),
+    );
+  }
+
+  Widget _input({
+    required TextEditingController controller,
+    required String hint,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      validator: validator,
+      decoration: InputDecoration(
+        hintText: hint,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
