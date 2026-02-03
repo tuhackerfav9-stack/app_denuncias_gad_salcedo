@@ -22,13 +22,13 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
 
   int currentIndex = 3;
 
-  // filtros UI
+  // filtros UI (chips)
   String filtro = 'todos';
 
-  // centro
+  // centro Salcedo
   static const LatLng initialCenter = LatLng(-0.9333, -78.6167);
 
-  // Controller seguro (evita usar controller ya disposed)
+  // Controller seguro
   final Completer<GoogleMapController> _mapCompleter =
       Completer<GoogleMapController>();
   GoogleMapController? _mapController;
@@ -43,9 +43,9 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
   double? _lat0;
   double? _lng0;
 
-  // debounce + control de respuestas viejas
+  // debounce + control respuestas viejas
   Timer? _debounce;
-  int _requestSeq = 0; // incrementa cada request
+  int _requestSeq = 0;
 
   @override
   void initState() {
@@ -53,7 +53,7 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
 
     _initGeoAndLoad();
 
-    // ✅ Debounce: espera 400ms desde la última tecla
+    // Debounce: 400ms
     searchController.addListener(() {
       _debounce?.cancel();
       _debounce = Timer(const Duration(milliseconds: 400), () {
@@ -66,7 +66,6 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
   void dispose() {
     _debounce?.cancel();
     searchController.dispose();
-    // Importante: no intentes usar el controller después de dispose
     _mapController = null;
     super.dispose();
   }
@@ -95,25 +94,43 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
     await _loadFromApi();
   }
 
+  // ✅ IDs quemados (según tu tabla real)
   int? _tipoIdFromFiltro(String f) {
-    // Ajusta a tu DB real (ejemplo según tus tipos 1..6)
     switch (f) {
-      case "luz publica":
-        return 1; // Alumbrado público
-      case "basura":
-        return 2; // Basura / Aseo
-      case "vial":
-        return 3; // Vías / Baches
-      case "otros":
-        // "otros" puede abarcar más de un id (4,5,6), entonces no filtramos por id.
-        return null;
+      case "luz": // Alumbrado público (id 1)
+        return 1;
+
+      case "luminaria": // Luminarias dañadas (id 2)
+        return 2;
+
+      case "basura": // Acumulación de basura (id 3)
+        return 3;
+
+      case "agua": // Falta de agua potable (id 5)
+        return 5;
+
+      case "alcantarillado": // Alcantarillado tapado (id 8)
+        return 8;
+
+      case "baches": // Baches o huecos (id 14)
+        return 14;
+
+      case "calles": // Calles en mal estado (id 13)
+        return 13;
+
+      case "riesgo": // Riesgo estructural (id 23)
+        return 23;
+
+      case "otro": // Otro (id 31)
+        return 31;
+
+      case "todos":
       default:
         return null;
     }
   }
 
   Future<void> _loadFromApi() async {
-    // token para ignorar respuestas viejas
     final mySeq = ++_requestSeq;
 
     if (mounted) {
@@ -125,19 +142,18 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
 
     try {
       final q = searchController.text.trim();
-      final tipoId = (filtro == "todos") ? null : _tipoIdFromFiltro(filtro);
+      final tipoId = _tipoIdFromFiltro(filtro);
 
       final res = await repo.getMapa(
         lat: _lat0,
         lng: _lng0,
-        radioKm: 5,
+        radioKm: 55,
         soloHoy: false,
         soloMias: true,
-        tipoDenunciaId: tipoId,
+        tipoDenunciaId: tipoId, //  int? real
         q: q.isEmpty ? null : q,
       );
 
-      // Si ya hubo otra llamada más nueva, ignoramos esta respuesta
       if (!mounted || mySeq != _requestSeq) return;
 
       final list = (res["items"] as List?) ?? [];
@@ -162,7 +178,6 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
             title: tipo,
             snippet: estado.isEmpty ? desc : "$estado • $desc",
             onTap: () {
-              // abrir detalle (si quieres)
               Navigator.pushNamed(context, '/detalle_denuncia', arguments: m);
             },
           ),
@@ -176,7 +191,7 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
         _error = null;
       });
 
-      // ✅ Centrar mapa en el primer item, de forma segura
+      // centrar seguro
       if (_items.isNotEmpty) {
         await _safeAnimateToFirst(_items.first);
       }
@@ -192,20 +207,16 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
 
   Future<void> _safeAnimateToFirst(Map<String, dynamic> first) async {
     try {
-      // Espera a que el mapa esté creado
-      final controller = _mapController ?? await _mapCompleter.future; // seguro
+      final controller = _mapController ?? await _mapCompleter.future;
       if (!mounted) return;
 
       final lat = (first["latitud"] as num).toDouble();
       final lng = (first["longitud"] as num).toDouble();
 
-      // OJO: si el widget fue disposed, mounted sería false y salimos arriba
       await controller.animateCamera(
         CameraUpdate.newLatLngZoom(LatLng(lat, lng), 14),
       );
-    } catch (_) {
-      // si por cualquier motivo el controller ya no existe, no hacemos nada
-    }
+    } catch (_) {}
   }
 
   void _onBottomNavTap(int index) {
@@ -288,13 +299,7 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
           style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600),
         ),
         actions: [
-          IconButton(
-            onPressed: () {
-              // refrescar sin romper el mapa
-              _loadFromApi();
-            },
-            icon: const Icon(Icons.refresh),
-          ),
+          IconButton(onPressed: _loadFromApi, icon: const Icon(Icons.refresh)),
           Padding(
             padding: const EdgeInsets.only(right: 14),
             child: FutureBuilder<String?>(
@@ -326,11 +331,10 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
         ],
       ),
 
-      // ✅ CLAVE: el mapa SIEMPRE existe (nunca se desmonta)
-      // y el loading/error van encima en overlay.
+      // mapa siempre montado + overlays
       body: Column(
         children: [
-          // Buscador
+          // buscador
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
             child: Container(
@@ -350,7 +354,7 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
             ),
           ),
 
-          // Chips
+          // chips
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: SingleChildScrollView(
@@ -358,28 +362,46 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
               child: Row(
                 children: [
                   _FilterChip(
+                    text: 'luz',
+                    icon: Icons.lightbulb_outline,
+                    selected: filtro == 'luz',
+                    onTap: () => _setFiltro('luz'),
+                  ),
+                  _FilterChip(
                     text: 'basura',
                     icon: Icons.delete_outline,
                     selected: filtro == 'basura',
                     onTap: () => _setFiltro('basura'),
                   ),
                   _FilterChip(
-                    text: 'vial',
+                    text: 'baches',
                     icon: Icons.construction_outlined,
-                    selected: filtro == 'vial',
-                    onTap: () => _setFiltro('vial'),
+                    selected: filtro == 'baches',
+                    onTap: () => _setFiltro('baches'),
                   ),
                   _FilterChip(
-                    text: 'luz publica',
-                    icon: Icons.lightbulb_outline,
-                    selected: filtro == 'luz publica',
-                    onTap: () => _setFiltro('luz publica'),
+                    text: 'agua',
+                    icon: Icons.water_drop_outlined,
+                    selected: filtro == 'agua',
+                    onTap: () => _setFiltro('agua'),
                   ),
                   _FilterChip(
-                    text: 'otros',
+                    text: 'alcantarillado',
+                    icon: Icons.plumbing_outlined,
+                    selected: filtro == 'alcantarillado',
+                    onTap: () => _setFiltro('alcantarillado'),
+                  ),
+                  _FilterChip(
+                    text: 'riesgo',
+                    icon: Icons.warning_amber_outlined,
+                    selected: filtro == 'riesgo',
+                    onTap: () => _setFiltro('riesgo'),
+                  ),
+                  _FilterChip(
+                    text: 'otro',
                     icon: Icons.description_outlined,
-                    selected: filtro == 'otros',
-                    onTap: () => _setFiltro('otros'),
+                    selected: filtro == 'otro',
+                    onTap: () => _setFiltro('otro'),
                   ),
                   const SizedBox(width: 6),
                   GestureDetector(
@@ -424,7 +446,6 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
                   },
                 ),
 
-                // Overlay de loading
                 if (_loading)
                   Positioned(
                     left: 0,
@@ -432,7 +453,7 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
                     top: 0,
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 10),
-                      color: Colors.white.withValues(alpha: 0.85),
+                      color: Colors.white.withOpacity(0.85),
                       child: const Center(
                         child: SizedBox(
                           height: 18,
@@ -443,7 +464,6 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
                     ),
                   ),
 
-                // Overlay de error (sin destruir el mapa)
                 if (_error != null)
                   Positioned(
                     left: 12,
@@ -505,7 +525,6 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
   }
 }
 
-// Chip (igual a tu estilo)
 class _FilterChip extends StatelessWidget {
   final String text;
   final IconData icon;

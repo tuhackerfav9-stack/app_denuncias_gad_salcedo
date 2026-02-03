@@ -31,11 +31,36 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
 
   //   NUEVO: Mapa local para mostrar nombre en vez de "Tipo #"
   static const List<String> _tipos = [
-    'Alumbrado público',
-    'Basura / Aseo',
-    'Vías / Baches',
-    'Seguridad',
-    'Ruido',
+    'Falta de alumbrado público',
+    'Luminarias dañadas',
+    'Acumulación de basura en vía pública',
+    'Parques o espacios públicos abandonados',
+    'Falta de agua potable',
+    'Agua contaminada o turbia',
+    'Fuga de agua',
+    'Alcantarillado tapado o colapsado',
+    'Botadero clandestino',
+    'Quema de basura',
+    'Manejo inadecuado de residuos',
+    'Contaminación ambiental',
+    'Calles en mal estado',
+    'Baches o huecos en la vía',
+    'Aceras o veredas dañadas',
+    'Obra pública abandonada',
+    'Problemas en programas sociales',
+    'Maltrato a grupos vulnerables',
+    'Uso indebido de espacios culturales',
+    'Eventos culturales mal organizados',
+    'Comercio informal o ilegal',
+    'Uso indebido del espacio público',
+    'Riesgo estructural',
+    'Falta de control municipal',
+    'Trámite irregular',
+    'Error en escrituras o registros',
+    'Demora injustificada en trámites',
+    'Vulneración de derechos',
+    'Maltrato infantil',
+    'Violencia intrafamiliar',
     'Otro',
   ];
 
@@ -201,7 +226,7 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
       desc: desc,
       headerAnimationLoop: false,
 
-      // ✅ Header azul
+      //   Header azul
       customHeader: _blueHeader(Icons.check_circle_outline),
 
       btnOkText: "Listo",
@@ -218,7 +243,7 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
       desc: desc,
       headerAnimationLoop: false,
 
-      // ✅ Header azul (no rojo)
+      //   Header azul (no rojo)
       customHeader: _blueHeader(Icons.error_outline),
 
       btnOkText: "Entendido",
@@ -239,7 +264,7 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
       desc: desc,
       headerAnimationLoop: false,
 
-      // ✅ Header azul (no amarillo)
+      // Header azul (no amarillo)
       customHeader: _blueHeader(Icons.help_outline),
 
       btnCancelText: "Cancelar",
@@ -259,7 +284,7 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
 
       _okDialog(
         "Denuncia enviada",
-        (res['detail'] ?? "Borrador finalizado").toString(),
+        (res['detail'] ?? " finalizado").toString(),
       );
       await _refresh();
     } on ApiException catch (e) {
@@ -278,7 +303,7 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
       await repo.eliminarBorrador(id);
       if (!mounted) return;
 
-      _okDialog("Borrador eliminado", "Se eliminó correctamente.");
+      _okDialog("Denuncia eliminada", "Se eliminó correctamente.");
       await _refresh();
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -317,7 +342,7 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
               Row(
                 children: [
                   const Text(
-                    "Borrador",
+                    "Denuncia",
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(width: 10),
@@ -392,13 +417,13 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
                     Navigator.pop(context);
 
                     _confirmDialog(
-                      title: "Eliminar borrador",
+                      title: "Eliminar Denuncia",
                       desc: "Esta acción no se puede deshacer. ¿Eliminar?",
                       onOk: () async => await _eliminarBorrador(id),
                     );
                   },
                   icon: const Icon(Icons.delete_outline),
-                  label: const Text("Eliminar borrador"),
+                  label: const Text("Eliminar Denuncia"),
                   style: TextButton.styleFrom(
                     foregroundColor: Colors.red.shade700,
                   ),
@@ -746,13 +771,13 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
         _sectionTitle(
           "Denuncias en Revición",
           subtitle: finalizadosAuto != 0
-              ? "(auto-finalizados: $finalizadosAuto)"
+              ? "revisada y enviada: $finalizadosAuto"
               : null,
         ),
         if (borradores.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Text("No tienes denuncias recientes."),
+            child: Text("No tienes denuncias en revición o por aprobar."),
           )
         else
           ...borradores.map((raw) {

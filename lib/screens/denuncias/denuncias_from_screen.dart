@@ -36,11 +36,36 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
   // Tipo denuncia
   String? tipoDenuncia;
   final List<String> tipos = const [
-    'Alumbrado público',
-    'Basura / Aseo',
-    'Vías / Baches',
-    'Seguridad',
-    'Ruido',
+    'Falta de alumbrado público',
+    'Luminarias dañadas',
+    'Acumulación de basura en vía pública',
+    'Parques o espacios públicos abandonados',
+    'Falta de agua potable',
+    'Agua contaminada o turbia',
+    'Fuga de agua',
+    'Alcantarillado tapado o colapsado',
+    'Botadero clandestino',
+    'Quema de basura',
+    'Manejo inadecuado de residuos',
+    'Contaminación ambiental',
+    'Calles en mal estado',
+    'Baches o huecos en la vía',
+    'Aceras o veredas dañadas',
+    'Obra pública abandonada',
+    'Problemas en programas sociales',
+    'Maltrato a grupos vulnerables',
+    'Uso indebido de espacios culturales',
+    'Eventos culturales mal organizados',
+    'Comercio informal o ilegal',
+    'Uso indebido del espacio público',
+    'Riesgo estructural',
+    'Falta de control municipal',
+    'Trámite irregular',
+    'Error en escrituras o registros',
+    'Demora injustificada en trámites',
+    'Vulneración de derechos',
+    'Maltrato infantil',
+    'Violencia intrafamiliar',
     'Otro',
   ];
 
@@ -436,9 +461,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
   Future<List<int>> _obtenerFirmaBytesObligatoria() async {
     if (_firmaBloqueada) {
-      throw Exception(
-        "La firma ya existe en el borrador (no se vuelve a firmar).",
-      );
+      throw Exception("La firma ya existe (no se vuelve a firmar).");
     }
 
     if (!_firmaValida()) {
@@ -488,7 +511,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     _dlgConfirm(
       title: _modoEditarBorrador ? "Guardar cambios" : "Enviar denuncia",
       desc: _modoEditarBorrador
-          ? "¿Deseas guardar los cambios del borrador?"
+          ? "¿Deseas guardar los cambios?"
           : "¿Deseas enviar esta denuncia ahora?",
       onOk: () async => await _denunciarReal(idx + 1),
     );
@@ -602,7 +625,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
   void _abrirChatbot() {
     Navigator.pushNamed(context, '/chatbot');
-    _snack('Chatbot 🤖 (solo frontend)');
+    //_snack('Chatbot  (solo frontend)');
   }
 
   void _snack(String msg) {
@@ -764,9 +787,17 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 value: tipoDenuncia,
-                items: tipos
-                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                    .toList(),
+                isExpanded: true, // ✅ evita overflow
+                items: tipos.map((t) {
+                  return DropdownMenuItem(
+                    value: t,
+                    child: Text(
+                      t,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis, // ✅ recorta con ...
+                    ),
+                  );
+                }).toList(),
                 onChanged: (v) => setState(() => tipoDenuncia = v),
                 validator: (v) => (v == null || v.isEmpty)
                     ? 'Seleccione el tipo de denuncia'
@@ -901,7 +932,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                   child: Text(
                     "Evidencias seleccionadas: "
                     "${_fotos.length} foto(s), ${_videos.length} video(s)"
-                    "${_evidenciasRemotas.isNotEmpty ? " • +${_evidenciasRemotas.length} en el borrador" : ""}",
+                    "${_evidenciasRemotas.isNotEmpty ? " • +${_evidenciasRemotas.length} en " : ""}",
                     style: TextStyle(color: Colors.grey.shade700),
                   ),
                 ),

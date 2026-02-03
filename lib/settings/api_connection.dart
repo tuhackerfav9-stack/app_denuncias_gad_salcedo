@@ -16,7 +16,9 @@ class ApiConnection {
   ApiConnection._internal();
 
   // CAMBIA SOLO LA IP SI HACE FALTA
-  final String baseUrl = "http://192.168.100.46:8000/";
+  //final String baseUrl = "http://192.168.100.46:8000/";
+  //render https://denuncias-gad.onrender.com
+  final String baseUrl = "https://denuncias-gad.onrender.com";
 
   // Timeouts (para que NO se quede cargando)
   static const Duration _timeout = Duration(seconds: 25);

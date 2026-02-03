@@ -71,7 +71,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
   Future<void> _handleApiError(Object e) async {
     final msg = e.toString();
 
-    // ✅ Sin internet / DNS / socket
+    //  Sin internet / DNS / socket
     if (e is SocketException ||
         _containsAny(msg.toLowerCase(), [
           "socketexception",
@@ -92,7 +92,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
       return;
     }
 
-    // ✅ Timeout
+    //  Timeout
     if (e is TimeoutException || msg.toLowerCase().contains("timeout")) {
       await _showErrorDialog(
         title: "Tiempo de espera",
@@ -104,7 +104,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
       return;
     }
 
-    // ✅ Códigos HTTP detectados en el mensaje
+    //  Códigos HTTP detectados en el mensaje
     final code = _extractStatus(msg);
 
     if (code == "401") {
@@ -171,7 +171,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
       return;
     }
 
-    // ✅ Desconocido (?)
+    //  Desconocido (?)
     await _showErrorDialog(
       title: "Error desconocido",
       code: "",
@@ -281,14 +281,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
         _ChatMessage(
           text:
               "Hola 👋 ¿Qué deseas denunciar hoy?\n"
-              "Puedes escribir el nombre o el número:\n\n"
-              "1. Alumbrado público\n"
-              "2. Basura / Aseo\n"
-              "3. Vías / Baches\n"
-              "4. Seguridad\n"
-              "5. Ruido\n"
-              "6. Otros\n\n"
-              "Luego cuéntame qué pasó y dónde fue 📍",
+              "Puedes escribir el nombre o el número:",
           isMe: false,
         ),
       );
@@ -313,11 +306,11 @@ class _ChatbotScreenState extends State<ChatbotScreen>
       if (_convId == null || _convId!.isEmpty) return;
     }
 
-    // 👇 Guardamos si había adjunto en este envío (para subirlo después del mensaje)
+    //  Guardamos si había adjunto en este envío (para subirlo después del mensaje)
     final File? mediaToUpload = _mediaFile;
     final bool mediaIsVideo = _mediaEsVideo;
 
-    // ✅ Validación: si el archivo ya no existe, no intentes subir
+    //  Validación: si el archivo ya no existe, no intentes subir
     if (mediaToUpload != null && !await mediaToUpload.exists()) {
       _toast("❌ El archivo ya no existe. Vuelve a adjuntar.");
       return;
@@ -365,7 +358,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
       if (mediaToUpload != null) {
         if (_borradorId == null || _borradorId!.isEmpty) {
           _toast(
-            "📎 Adjuntado listo. Envía 1 mensaje más para crear borrador.",
+            "📎 Adjuntado listo. Envía 1 mensaje más para crear denuncia.",
           );
         } else {
           final tipo = mediaIsVideo ? "video" : "foto";
@@ -376,7 +369,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
               archivo: mediaToUpload,
               tipo: tipo,
             );
-            _toast("✅ Evidencia subida");
+            _toast(" Evidencia subida");
           } catch (e) {
             //_toast(" Error subiendo evidencia: $e");
             await _handleApiError(e);
@@ -558,7 +551,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
 
   Future<void> _subirFirma() async {
     if (_borradorId == null || _borradorId!.isEmpty) {
-      _toast("⚠️ Aún no hay borrador. Escribe primero tipo + descripción.");
+      _toast("⚠️ Aún no hay denuncia. Escribe primero tipo + descripción.");
       return;
     }
 
@@ -833,8 +826,8 @@ class _ChatbotScreenState extends State<ChatbotScreen>
                 const SizedBox(width: 8),
                 _miniChip(
                   label: _borradorId == null
-                      ? "sin borrador"
-                      : "borrador listo",
+                      ? "sin denuncia"
+                      : "denuncia lista",
                   ok: _borradorId != null,
                 ),
               ],
