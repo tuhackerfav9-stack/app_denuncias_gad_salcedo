@@ -4,30 +4,41 @@ import '../settings/api_connection.dart';
 import 'denuncias_repository.dart';
 
 class ChatbotRepository {
-  final api = ApiConnection();
+  final ApiConnection api = ApiConnection();
   final DenunciasRepository denunciasRepo = DenunciasRepository();
 
-  // POST /api/chatbot/start/
-  Future<Map<String, dynamic>> start() async {
-    final res = await api.post("api/chatbot/start/", {}, auth: true);
+  // ✅ V2 start
+  Future<Map<String, dynamic>> startV2() async {
+    final res = await api.post("api/chatbot/v2/start/", {}, auth: true);
     if (res is Map) return Map<String, dynamic>.from(res);
-    throw Exception("Formato inesperado en chatbot/start");
+    throw Exception("Formato inesperado en chatbot/v2/start");
   }
 
-  // POST /api/chatbot/message/
-  Future<Map<String, dynamic>> sendMessage({
+  // ✅ V2 message (sync)
+  Future<Map<String, dynamic>> syncV2({
     required String conversacionId,
     required String mensaje,
+    String? botResponse, // respuesta Gemini
+    Map<String, dynamic>? extracted, // opcional (si tú parseas algo en front)
   }) async {
-    final res = await api.post("api/chatbot/message/", {
+    final body = <String, dynamic>{
       "conversacion_id": conversacionId,
       "mensaje": mensaje,
-    }, auth: true);
+    };
+
+    if (botResponse != null && botResponse.trim().isNotEmpty) {
+      body["bot_response"] = botResponse.trim();
+    }
+    if (extracted != null && extracted.isNotEmpty) {
+      body["extracted"] = extracted;
+    }
+
+    final res = await api.post("api/chatbot/v2/message/", body, auth: true);
     if (res is Map) return Map<String, dynamic>.from(res);
-    throw Exception("Formato inesperado en chatbot/message");
+    throw Exception("Formato inesperado en chatbot/v2/message");
   }
 
-  // Evidencia -> reusa DenunciasRepository (multipart)
+  // ✅ Evidencia (multipart) -> reusa DenunciasRepository
   Future<Map<String, dynamic>> subirEvidencia({
     required String borradorId,
     required File archivo,
@@ -40,7 +51,7 @@ class ChatbotRepository {
     );
   }
 
-  // Firma -> reusa DenunciasRepository (multipart)
+  // ✅ Firma (multipart) -> reusa DenunciasRepository
   Future<Map<String, dynamic>> subirFirma({
     required String borradorId,
     required List<int> pngBytes,
@@ -51,9 +62,18 @@ class ChatbotRepository {
     );
   }
 
+  // ✅ Finalizar borrador -> reusa DenunciasRepository
   Future<Map<String, dynamic>> finalizarBorrador({
     required String borradorId,
   }) async {
     return await denunciasRepo.finalizarBorrador(borradorId);
+  }
+
+  //usarchatbotv2tipo
+
+  Future<Map<String, dynamic>> tiposV2() async {
+    final res = await api.get("api/chatbot/v2/tipos/", auth: true);
+    if (res is Map) return Map<String, dynamic>.from(res);
+    throw Exception("Formato inesperado en chatbot/v2/tipos");
   }
 }

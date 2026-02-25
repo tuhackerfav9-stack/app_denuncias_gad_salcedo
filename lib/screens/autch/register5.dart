@@ -153,7 +153,8 @@ class _Register5State extends State<Register5> {
 
       if (!mounted) return;
 
-      final detail = (resp["detail"] ?? "Registro completo ✅").toString();
+      final detail = (resp["detail"] ?? "Registro completo ")
+          .toString(); //solo pruebas
 
       // éxito: mantenemos SnackBar como tú lo tenías
       ScaffoldMessenger.of(

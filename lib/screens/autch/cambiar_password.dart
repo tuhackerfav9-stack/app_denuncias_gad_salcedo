@@ -140,7 +140,8 @@ class _CambiarPasswordState extends State<CambiarPassword> {
 
       if (!mounted) return;
 
-      final detail = (resp["detail"] ?? "Contraseña actualizada ✅").toString();
+      final detail = (resp["detail"] ?? "Contraseña actualizada ")
+          .toString(); //solo prieubas
 
       ScaffoldMessenger.of(
         context,

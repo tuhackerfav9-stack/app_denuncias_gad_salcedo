@@ -18,10 +18,10 @@ class ApiConnection {
   // CAMBIA SOLO LA IP SI HACE FALTA
   //final String baseUrl = "http://192.168.100.46:8000/";
   //render https://denuncias-gad.onrender.com
-  final String baseUrl = "https://denuncias-gad.onrender.com";
+  final String baseUrl = "https://denuncias-gad.onrender.com/";
 
   // Timeouts (para que NO se quede cargando)
-  static const Duration _timeout = Duration(seconds: 25);
+  static const Duration _timeout = Duration(minutes: 3);
 
   // Lock para evitar refresh simultáneo
   Future<bool>? _refreshing;
@@ -301,7 +301,7 @@ class ApiConnection {
       if (fields != null) req.fields.addAll(fields);
       req.files.addAll(files);
 
-      final streamed = await req.send().timeout(const Duration(seconds: 60));
+      final streamed = await req.send().timeout(_timeout);
       return http.Response.fromStream(streamed);
     }
 

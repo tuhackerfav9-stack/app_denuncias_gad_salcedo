@@ -215,9 +215,9 @@ class _Register4State extends State<Register4> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Documentos guardados ✅')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Documentos guardados ')),
+      ); //solo pruebAas
 
       Navigator.pushNamed(context, '/register5', arguments: {"uid": _uid});
     } on ApiException catch (e) {

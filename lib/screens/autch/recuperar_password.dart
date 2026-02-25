@@ -129,9 +129,9 @@ class _RecuperarPasswordState extends State<RecuperarPassword> {
 
       // Si es DEV, mostramos el código (igual que antes)
       if (devCodigo.isNotEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("✅ Código (DEV): $devCodigo")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(" Código (DEV): $devCodigo")),
+        ); //solo pruebas
       }
 
       // Si no vino reset_id (igual que antes)

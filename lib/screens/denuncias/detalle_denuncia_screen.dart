@@ -7,6 +7,8 @@ import '../../settings/session.dart';
 import '../../repositories/denuncias_repository.dart';
 import '../../pdf/denuncia_pdf_builder.dart';
 
+import 'video_viewer_screen.dart';
+
 class DetalleDenunciaScreen extends StatefulWidget {
   const DetalleDenunciaScreen({super.key});
 
@@ -22,32 +24,90 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
 
   int currentIndex = 0;
 
-  //   Repo + estado detalle real
+  // Repo + estado detalle real
   final repo = DenunciasRepository();
   Map<String, dynamic>? _detalle;
   bool _loading = true;
   String? _error;
 
-  //   Respuestas
+  // Respuestas
   List<Map<String, dynamic>> _respuestas = [];
   bool _loadingResp = false;
   String? _errorResp;
 
   // =========================
+  // ✅ JWT headers para BIN (firma/evidencias)
+  // =========================
+  Future<Map<String, String>> _jwtHeaders() async {
+    final token = await Session.access();
+    if (token == null || token.trim().isEmpty) return {};
+    return {"Authorization": "Bearer $token"};
+  }
+
+  Widget _authImage(
+    String url, {
+    BoxFit fit = BoxFit.cover,
+    double? width,
+    double? height,
+    Widget? loading,
+    Widget? error,
+  }) {
+    return FutureBuilder<Map<String, String>>(
+      future: _jwtHeaders(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return loading ??
+              SizedBox(
+                width: width,
+                height: height,
+                child: const Center(child: CircularProgressIndicator()),
+              );
+        }
+
+        final headers = snap.data ?? {};
+
+        return Image.network(
+          url,
+          headers: headers, // ✅ JWT para BIN
+          width: width,
+          height: height,
+          fit: fit,
+          errorBuilder: (_, __, ___) {
+            return error ??
+                SizedBox(
+                  width: width,
+                  height: height,
+                  child: const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(10),
+                      child: Text("No se pudo cargar la imagen."),
+                    ),
+                  ),
+                );
+          },
+        );
+      },
+    );
+  }
+
+  // =========================
   // Helpers
   // =========================
 
-  // Normalizar URL (por si backend manda /media/...)
+  // Normalizar URL (por si backend manda /media/... o /api/...)
   String _absUrl(String? u) {
     if (u == null) return "";
     final s = u.trim();
     if (s.isEmpty) return "";
     if (s.startsWith("http://") || s.startsWith("https://")) return s;
 
-    if (s.startsWith("/")) {
-      return "${repo.baseUrl}$s"; // baseUrl sin slash final
-    }
-    return "${repo.baseUrl}/$s";
+    // baseUrl puede venir con "/" final
+    final b = repo.baseUrl.endsWith("/")
+        ? repo.baseUrl.substring(0, repo.baseUrl.length - 1)
+        : repo.baseUrl;
+
+    if (s.startsWith("/")) return "$b$s";
+    return "$b/$s";
   }
 
   void _snack(String msg) {
@@ -203,10 +263,14 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
       builder: (_) => Dialog(
         insetPadding: const EdgeInsets.all(14),
         child: InteractiveViewer(
-          child: Image.network(
+          child: _authImage(
             url,
             fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => const Padding(
+            loading: const Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: const Padding(
               padding: EdgeInsets.all(20),
               child: Text("No se pudo cargar la imagen."),
             ),
@@ -253,7 +317,7 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
   }
 
   // =========================
-  // UI Respuestas (DENTRO del State  )
+  // UI Respuestas (DENTRO del State)
   // =========================
   Widget _respuestasSection(String denunciaId) {
     String fmt(dynamic v) {
@@ -800,16 +864,22 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
 
                             if (isVideo) {
                               return _miniBox(
-                                onTap: () => _snack(
-                                  "Video: abre el link en un visor (si quieres lo implemento)",
-                                ),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          VideoViewerScreen(url: url),
+                                    ),
+                                  );
+                                },
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: const [
                                     Icon(Icons.videocam, size: 28),
                                     SizedBox(height: 6),
                                     Text(
-                                      "Video",
+                                      "Ver video",
                                       style: TextStyle(
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -823,12 +893,19 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
                               onTap: () => _verImagenFull(url),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
-                                child: Image.network(
+                                child: _authImage(
                                   url,
                                   width: 120,
                                   height: 92,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const Center(
+                                  loading: const SizedBox(
+                                    width: 120,
+                                    height: 92,
+                                    child: Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  ),
+                                  error: const Center(
                                     child: Padding(
                                       padding: EdgeInsets.all(10),
                                       child: Text("No carga"),
@@ -880,10 +957,13 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
                             border: Border.all(color: Colors.grey.shade300),
                           ),
                           clipBehavior: Clip.antiAlias,
-                          child: Image.network(
+                          child: _authImage(
                             firmaUrl,
                             fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => const Center(
+                            loading: const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                            error: const Center(
                               child: Text("No se pudo cargar la firma."),
                             ),
                           ),
@@ -907,7 +987,33 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
                           id.toString(),
                         );
 
+                        // token (si tu backend protege media, esto lo arregla)
+                        final token =
+                            await Session.access(); // o Session.token() si así lo tienes
+
+                        // normaliza firma
+                        String firmaUrl = "";
+                        final f = detalle["firma"];
+                        if (f is Map) {
+                          firmaUrl = (f["firma_url"] ?? f["url"] ?? "")
+                              .toString();
+                        } else {
+                          firmaUrl = (detalle["firma_url"] ?? "").toString();
+                        }
+
+                        // normaliza evidencias (asegura url_archivo)
+                        final evs = (detalle["evidencias"] as List?) ?? [];
+                        final evidenciasNorm = evs.map((e) {
+                          final m = Map<String, dynamic>.from(e as Map);
+                          m["url_archivo"] =
+                              (m["url_archivo"] ?? m["url"] ?? "").toString();
+                          return m;
+                        }).toList();
+
                         final data = {
+                          "base_url": repo.baseUrl, // ✅ CLAVE para /media/...
+                          "auth_token": token, // ✅ si media requiere token
+
                           "tipo_denuncia_nombre":
                               detalle["tipo_denuncia"]?["nombre"],
                           "descripcion": detalle["descripcion"],
@@ -923,8 +1029,8 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
                               detalle["ciudadano"]?["apellidos"],
                           "ciudadano_cedula": detalle["ciudadano"]?["cedula"],
 
-                          "firma_url": _absUrl(detalle["firma"]?["firma_url"]),
-                          "evidencias": detalle["evidencias"],
+                          "firma_url": firmaUrl,
+                          "evidencias": evidenciasNorm,
                         };
 
                         final pdfBytes = await DenunciaPdfBuilder.build(
@@ -938,6 +1044,42 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
                         _snack("Error PDF: $e");
                       }
                     },
+
+                    //onPressed: () async {
+                    //  try {
+                    //    final detalle = await repo.getDetalleDenuncia(
+                    //      id.toString(),
+                    //    );
+                    //
+                    //    final data = {
+                    //      "tipo_denuncia_nombre":
+                    //          detalle["tipo_denuncia"]?["nombre"],
+                    //      "descripcion": detalle["descripcion"],
+                    //      "estado": detalle["estado"],
+                    //      "referencia": detalle["referencia"],
+                    //      "direccion_texto": detalle["direccion_texto"],
+                    //      "latitud": detalle["latitud"],
+                    //      "longitud": detalle["longitud"],
+                    //      "created_at": detalle["created_at"],
+                    //      "ciudadano_nombres": detalle["ciudadano"]?["nombres"],
+                    //      "ciudadano_apellidos":
+                    //          detalle["ciudadano"]?["apellidos"],
+                    //      "ciudadano_cedula": detalle["ciudadano"]?["cedula"],
+                    //      "firma_url": _absUrl(detalle["firma"]?["firma_url"]),
+                    //      "evidencias": detalle["evidencias"],
+                    //    };
+                    //
+                    //    final pdfBytes = await DenunciaPdfBuilder.build(
+                    //      denuncia: data,
+                    //    );
+                    //
+                    //    await Printing.layoutPdf(
+                    //      onLayout: (_) async => pdfBytes,
+                    //    );
+                    //  } catch (e) {
+                    //    _snack("Error PDF: $e");
+                    //  }
+                    //},
                     icon: const Icon(Icons.picture_as_pdf),
                     label: const Text("Descargar PDF"),
                     style: OutlinedButton.styleFrom(
@@ -953,7 +1095,7 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
 
             const SizedBox(height: 14),
 
-            //   Respuestas (debajo del PDF)
+            // Respuestas (debajo del PDF)
             _respuestasSection(id.toString()),
 
             const SizedBox(height: 80),

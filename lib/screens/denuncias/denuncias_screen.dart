@@ -21,6 +21,46 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
   static const Color cancelGrey = Color(0xFF9E9E9E);
   int currentIndex = 0;
   final repo = DenunciasRepository();
+  // =========================
+  // Countdown real-time
+  // =========================
+  final Map<String, DateTime> _expiraAtById = {};
+  final Set<String> _autoRefreshOnce = {};
+
+  String _fmtMMSS(Duration d) {
+    final total = d.inSeconds < 0 ? 0 : d.inSeconds;
+    final m = (total ~/ 60).toString().padLeft(2, '0');
+    final s = (total % 60).toString().padLeft(2, '0');
+    return "$m:$s";
+  }
+
+  Widget _countdownWidget({
+    required String id,
+    required int expSeg,
+    TextStyle? style,
+  }) {
+    // Guardamos un "expiraAt" estable por ID, para que NO se reinicie cada build
+    _expiraAtById[id] ??= DateTime.now().add(Duration(seconds: expSeg));
+    final expiraAt = _expiraAtById[id]!;
+
+    return StreamBuilder<int>(
+      stream: Stream.periodic(const Duration(seconds: 1), (i) => i),
+      builder: (_, __) {
+        final left = expiraAt.difference(DateTime.now());
+        final safe = left.isNegative ? Duration.zero : left;
+
+        // Cuando llegue a 0, refrescamos 1 sola vez para que desaparezca del listado (si backend ya lo finalizó)
+        if (safe == Duration.zero && !_autoRefreshOnce.contains(id)) {
+          _autoRefreshOnce.add(id);
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) _refresh();
+          });
+        }
+
+        return Text(_fmtMMSS(safe), style: style);
+      },
+    );
+  }
 
   //   NUEVO: control de carga + error (para ErrorView)
   bool _loading = true;
@@ -158,6 +198,21 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
 
     try {
       final borradoresRes = await repo.getBorradoresMios();
+      final borradores = (borradoresRes["borradores"] as List?) ?? [];
+      _expiraAtById.clear();
+      _autoRefreshOnce.clear();
+
+      for (final raw in borradores) {
+        final b = Map<String, dynamic>.from(raw as Map);
+        final id = (b["id"] ?? "").toString();
+        final expSeg =
+            int.tryParse((b["expira_en_seg"] ?? "0").toString()) ?? 0;
+
+        if (id.isNotEmpty) {
+          _expiraAtById[id] = DateTime.now().add(Duration(seconds: expSeg));
+        }
+      }
+
       final denuncias = await repo.getMias();
       final data = _DenunciasData(
         borradoresRes: borradoresRes,
@@ -282,10 +337,7 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
       final res = await repo.finalizarBorrador(id);
       if (!mounted) return;
 
-      _okDialog(
-        "Denuncia enviada",
-        (res['detail'] ?? " finalizado").toString(),
-      );
+      _okDialog("Denuncia enviada", (res['detail'] ?? "Finalizado").toString());
       await _refresh();
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -358,7 +410,17 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
               Text("Tipo: $tipoNombre"),
 
               const SizedBox(height: 6),
-              Text("Expira en: $expSeg seg"),
+              Row(
+                children: [
+                  const Text("Expira en: "),
+                  _countdownWidget(
+                    id: id,
+                    expSeg: int.tryParse(expSeg.toString()) ?? 0,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ],
+              ),
+
               const SizedBox(height: 10),
               Text(
                 desc.isEmpty ? "(sin descripción)" : desc,
@@ -395,7 +457,7 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
 
                         _confirmDialog(
                           title: "Enviar denuncia",
-                          desc: "¿Deseas enviar este borrador ahora?",
+                          desc: "¿Deseas enviar esta denuncia ahora?",
                           onOk: () async => await _finalizarBorrador(id),
                         );
                       },
@@ -769,7 +831,7 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
       children: [
         // BORRADORES
         _sectionTitle(
-          "Denuncias en Revición",
+          "Denuncias en Revisión",
           subtitle: finalizadosAuto != 0
               ? "revisada y enviada: $finalizadosAuto"
               : null,
@@ -777,12 +839,12 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
         if (borradores.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Text("No tienes denuncias en revición o por aprobar."),
+            child: Text("No tienes denuncias en revisión o por aprobar."),
           )
         else
           ...borradores.map((raw) {
             final b = Map<String, dynamic>.from(raw as Map);
-            final expSeg = (b["expira_en_seg"] ?? 0);
+            // final expSeg = (b["expira_en_seg"] ?? 0);
             final desc = (b["descripcion"] ?? "").toString();
             final tipoId = b["tipo_denuncia_id"];
 
@@ -814,7 +876,21 @@ class _DenunciasScreenState extends State<DenunciasScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Expira revición en: $expSeg seg"),
+                      Row(
+                        children: [
+                          const Text("Expira en: "),
+                          _countdownWidget(
+                            id: (b["id"] ?? "").toString(),
+                            expSeg:
+                                int.tryParse(
+                                  (b["expira_en_seg"] ?? "0").toString(),
+                                ) ??
+                                0,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+
                       const SizedBox(height: 6),
                       Text(desc, maxLines: 2, overflow: TextOverflow.ellipsis),
                     ],

@@ -69,6 +69,21 @@ class RegisterRepository {
     required File cedulaFrontal,
     required File cedulaTrasera,
   }) async {
+    final cleanUid = uid.trim();
+    if (cleanUid.isEmpty) {
+      throw Exception("uid es obligatorio (paso4).");
+    }
+
+    // Validación rápida: que existan los archivos
+    if (!cedulaFrontal.existsSync()) {
+      throw Exception("No existe el archivo: cédula frontal.");
+    }
+    if (!cedulaTrasera.existsSync()) {
+      throw Exception("No existe el archivo: cédula trasera.");
+    }
+
+    // OJO: estos fieldName deben coincidir EXACTO con el backend:
+    // request.FILES.get("cedula_frontal") y request.FILES.get("cedula_trasera")
     final frontalPart = await api.filePart(
       fieldName: "cedula_frontal",
       file: cedulaFrontal,
@@ -82,12 +97,39 @@ class RegisterRepository {
     final res = await api.multipartPost(
       "api/auth/register/paso4/documentos/",
       auth: false,
-      fields: {"uid": uid.trim()},
+      fields: {"uid": cleanUid},
       files: [frontalPart, traseraPart],
     );
 
+    // Backend devuelve: detail, url_frontal, url_trasera
     return Map<String, dynamic>.from(res as Map);
   }
+
+  //// Paso 4: subir cedula frontal/trasera (multipart)
+  //Future<Map<String, dynamic>> subirDocumentos({
+  //  required String uid,
+  //  required File cedulaFrontal,
+  //  required File cedulaTrasera,
+  //}) async {
+  //  final frontalPart = await api.filePart(
+  //    fieldName: "cedula_frontal",
+  //    file: cedulaFrontal,
+  //  );
+  //
+  //  final traseraPart = await api.filePart(
+  //    fieldName: "cedula_trasera",
+  //    file: cedulaTrasera,
+  //  );
+  //
+  //  final res = await api.multipartPost(
+  //    "api/auth/register/paso4/documentos/",
+  //    auth: false,
+  //    fields: {"uid": uid.trim()},
+  //    files: [frontalPart, traseraPart],
+  //  );
+  //
+  //  return Map<String, dynamic>.from(res as Map);
+  //}
 
   // Paso 5: finalizar (crea usuarios/ciudadanos/documentos)
   Future<Map<String, dynamic>> finalizar({

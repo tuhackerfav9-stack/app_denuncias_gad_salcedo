@@ -33,6 +33,9 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
   final descripcionController = TextEditingController();
   final referenciaController = TextEditingController();
 
+  // Repo
+  final DenunciasRepository repo = DenunciasRepository();
+
   // Tipo denuncia
   String? tipoDenuncia;
   final List<String> tipos = const [
@@ -145,6 +148,15 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         }
       }
     }
+  }
+
+  // =========================
+  // ✅ JWT headers para BIN (firma/evidencias)
+  // =========================
+  Future<Map<String, String>> _jwtHeaders() async {
+    final token = await Session.access();
+    if (token == null || token.isEmpty) return {};
+    return {"Authorization": "Bearer $token"};
   }
 
   // =========================
@@ -378,7 +390,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         }
       });
     } catch (_) {
-      // Si algo raro pasa con GPS, no bloqueamos
       _snack('No se pudo obtener ubicación. Intenta nuevamente.');
     }
   }
@@ -484,6 +495,61 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
   }
 
   // =========================
+  // ✅ Ver evidencia remota (foto) con JWT
+  // =========================
+  void _verEvidenciaRemota(Map<String, dynamic> ev) {
+    final url = (ev["url"] ?? "").toString();
+    final tipo = (ev["tipo"] ?? "").toString().toLowerCase();
+
+    if (url.trim().isEmpty) return;
+
+    showDialog(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          title: Text(tipo.contains("video") ? "Video" : "Evidencia"),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: tipo.contains("video")
+                ? SelectableText(
+                    "Este es un video (endpoint protegido).\n\nURL:\n$url",
+                  )
+                : FutureBuilder<Map<String, String>>(
+                    future: _jwtHeaders(),
+                    builder: (context, snap) {
+                      final headers = snap.data ?? {};
+                      if (snap.connectionState == ConnectionState.waiting) {
+                        return const SizedBox(
+                          height: 120,
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      return Image.network(
+                        url,
+                        headers: headers,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const SizedBox(
+                          height: 120,
+                          child: Center(
+                            child: Text("No se pudo cargar la evidencia."),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cerrar"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // =========================
   // Enviar denuncia (mantiene tu rollback)
   // =========================
   Future<void> _denunciar() async {
@@ -507,12 +573,9 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
       return;
     }
 
-    //  Confirmación PRO
     _dlgConfirm(
-      title: _modoEditarBorrador ? "Guardar cambios" : "Enviar denuncia",
-      desc: _modoEditarBorrador
-          ? "¿Deseas guardar los cambios?"
-          : "¿Deseas enviar esta denuncia ahora?",
+      title: _modoEditarBorrador ? "Enviar denuncia" : "Enviar denuncia",
+      desc: "¿Deseas enviar esta denuncia ahora?",
       onOk: () async => await _denunciarReal(idx + 1),
     );
   }
@@ -523,7 +586,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
     setState(() => _enviando = true);
 
-    final repo = DenunciasRepository();
     String borradorIdFinal = "";
     bool borradorCreadoEnEsteEnvio = false;
 
@@ -591,13 +653,22 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
         );
       }
 
+      // ✅ 5) FINALIZAR BORRADOR -> CREA DENUNCIA REAL
+      //final fin = await repo.finalizarBorrador(borradorIdFinal);
+      //final denunciaId = (fin["denuncia_id"] ?? "").toString();
+      //if (denunciaId.isEmpty) {
+      //  throw Exception("No llegó denuncia_id al finalizar.");
+      //}
+
       if (!mounted) return;
 
       _dlgOk(
         title: "Listo",
         desc: _modoEditarBorrador
-            ? "Cambios guardados correctamente."
-            : "Denuncia enviada correctamente.",
+            ? "Cambios guardados. Puedes seguir editando mientras no expire."
+            : "Denuncia guardada. Tienes 5 minutos para editar antes de que se envíe automáticamente.",
+        //enviar la denuncia directo
+        //desc: "Denuncia enviada correctamente.\nID: $denunciaId",
       );
 
       Navigator.pushNamedAndRemoveUntil(context, '/denuncias', (r) => false);
@@ -625,7 +696,6 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
 
   void _abrirChatbot() {
     Navigator.pushNamed(context, '/chatbot');
-    //_snack('Chatbot  (solo frontend)');
   }
 
   void _snack(String msg) {
@@ -787,14 +857,14 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 value: tipoDenuncia,
-                isExpanded: true, // ✅ evita overflow
+                isExpanded: true,
                 items: tipos.map((t) {
                   return DropdownMenuItem(
                     value: t,
                     child: Text(
                       t,
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis, // ✅ recorta con ...
+                      overflow: TextOverflow.ellipsis,
                     ),
                   );
                 }).toList(),
@@ -932,7 +1002,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                   child: Text(
                     "Evidencias seleccionadas: "
                     "${_fotos.length} foto(s), ${_videos.length} video(s)"
-                    "${_evidenciasRemotas.isNotEmpty ? " • +${_evidenciasRemotas.length} en " : ""}",
+                    "${_evidenciasRemotas.isNotEmpty ? " • +${_evidenciasRemotas.length} en borrador" : ""}",
                     style: TextStyle(color: Colors.grey.shade700),
                   ),
                 ),
@@ -954,39 +1024,46 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                         onRemove: () => _removeVideo(i),
                       ),
                     for (final ev in _evidenciasRemotas)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: Colors.grey.shade300),
-                          color: Colors.grey.shade100,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              (ev["tipo"]?.toString().toLowerCase().contains(
-                                        "video",
-                                      ) ??
-                                      false)
-                                  ? Icons.videocam
-                                  : Icons.image,
-                              size: 18,
-                              color: Colors.black54,
-                            ),
-                            const SizedBox(width: 8),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 200),
-                              child: Text(
-                                "Borrador: ${(ev["url"] ?? "").toString().split('/').last}",
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Colors.black54),
+                      InkWell(
+                        onTap: () => _verEvidenciaRemota(ev),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: Colors.grey.shade300),
+                            color: Colors.grey.shade100,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                (ev["tipo"]?.toString().toLowerCase().contains(
+                                          "video",
+                                        ) ??
+                                        false)
+                                    ? Icons.videocam
+                                    : Icons.image,
+                                size: 18,
+                                color: Colors.black54,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 8),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 200,
+                                ),
+                                child: Text(
+                                  "Borrador: ${(ev["url"] ?? "").toString().split('/').last}",
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.black54),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.visibility, size: 18),
+                            ],
+                          ),
                         ),
                       ),
                   ],
@@ -1025,12 +1102,22 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                     color: Colors.white,
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: Image.network(
-                    _firmaUrlRemota!,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Center(
-                      child: Text("No se pudo cargar la firma guardada."),
-                    ),
+                  child: FutureBuilder<Map<String, String>>(
+                    future: _jwtHeaders(),
+                    builder: (context, snap) {
+                      final headers = snap.data ?? {};
+                      if (snap.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      return Image.network(
+                        _firmaUrlRemota!,
+                        headers: headers, // ✅ JWT para BIN
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Center(
+                          child: Text("No se pudo cargar la firma guardada."),
+                        ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1091,11 +1178,7 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                     foregroundColor: Colors.white,
                   ),
                   child: Text(
-                    _enviando
-                        ? "Enviando..."
-                        : (_modoEditarBorrador
-                              ? 'Guardar cambios'
-                              : 'Denunciar'),
+                    _enviando ? "Enviando..." : 'Denunciar',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,

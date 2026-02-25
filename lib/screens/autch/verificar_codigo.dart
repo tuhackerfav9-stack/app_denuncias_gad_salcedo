@@ -151,9 +151,9 @@ class _VerificarCodigoState extends State<VerificarCodigo> {
     }
 
     if (codigo.length != 6) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Ingresa los 6 dígitos ✅')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa los 6 dígitos ')),
+      ); //solo pruebas
       return;
     }
 
@@ -165,9 +165,9 @@ class _VerificarCodigoState extends State<VerificarCodigo> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Código verificado ✅')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Código verificado ')),
+      ); //solo pruebas
 
       Navigator.pushNamed(
         context,

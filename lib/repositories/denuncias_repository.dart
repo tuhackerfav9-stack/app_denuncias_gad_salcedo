@@ -1,19 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' as http_parser;
 
 import '../models/denuncia_model.dart';
 import '../settings/api_connection.dart';
 import '../settings/session.dart';
-import 'package:http_parser/http_parser.dart' as http_parser;
 
 class DenunciasRepository {
   final api = ApiConnection();
 
-  // IMPORTANTE:
-  // - ApiConnection.baseUrl = "http://192.168.100.46:8000/"
-  // - Para multipart usamos baseUrl sin duplicar slashes
-  final String baseUrl = "http://192.168.100.46:8000";
+  // ✅ IMPORTANTE:
+  // Ahora NO hardcodeamos la baseUrl aquí.
+  // Usamos la misma baseUrl que ya tienes en ApiConnection para evitar errores.
+  String get baseUrl => api.baseUrl; // e.g. https://denuncias-gad.onrender.com/
 
   // =========================
   // TOKEN
@@ -24,12 +25,12 @@ class DenunciasRepository {
     return t;
   }
 
-  // Refresh manual (para multipart)
+  // Refresh manual (para multipart cuando usamos http.MultipartRequest directo)
   Future<bool> _refreshToken() async {
     final refresh = await Session.refresh();
     if (refresh == null || refresh.isEmpty) return false;
 
-    final url = Uri.parse("$baseUrl/api/auth/refresh/");
+    final url = Uri.parse("${baseUrl}api/auth/refresh/");
     final resp = await http.post(
       url,
       headers: {"Content-Type": "application/json"},
@@ -48,7 +49,6 @@ class DenunciasRepository {
       }
       return true;
     }
-
     return false;
   }
 
@@ -67,10 +67,7 @@ class DenunciasRepository {
       if (!refreshed) {
         throw Exception("401 no autorizado (refresh falló): $body");
       }
-
-      // Reintento con nuevo token (toca rehacer request)
-      // Como MultipartRequest no se puede re-enviar fácil con mismos streams,
-      // este helper se usa solo desde métodos que pueden recrear request.
+      // MultipartRequest no se puede re-enviar; hacemos retry desde arriba recreando request
       throw _RetryMultipartException();
     }
 
@@ -84,11 +81,20 @@ class DenunciasRepository {
   }
 
   // =========================
-  // SUBIR EVIDENCIA (foto/video)
+  // ✅ HEADERS PARA URL BINARIA (Image.network / descargas)
+  // Porque esos endpoints /archivos/... piden JWT
+  // =========================
+  Future<Map<String, String>> authHeaders() async {
+    final token = await _accessToken();
+    return {"Authorization": "Bearer $token"};
+  }
+
+  // =========================
+  // SUBIR EVIDENCIA (BIN en BD)
   // POST /api/denuncias/borradores/<id>/evidencias/
   // form-data:
-  //   - archivo: file
-  //   - tipo: "foto" | "video"
+  //   - archivo: file  ✅ (clave exacta)
+  //   - tipo: foto|video|audio (opcional)
   // =========================
   Future<Map<String, dynamic>> subirEvidenciaBorrador({
     required String borradorId,
@@ -99,7 +105,7 @@ class DenunciasRepository {
       final token = await _accessToken();
 
       final uri = Uri.parse(
-        "$baseUrl/api/denuncias/borradores/$borradorId/evidencias/",
+        "${baseUrl}api/denuncias/borradores/$borradorId/evidencias/",
       );
 
       final req = http.MultipartRequest("POST", uri);
@@ -108,7 +114,7 @@ class DenunciasRepository {
 
       req.files.add(
         await http.MultipartFile.fromPath(
-          "archivo", // <- CLAVE EXACTA QUE ESPERA BACKEND
+          "archivo", // ✅ backend espera "archivo"
           archivo.path,
           filename: archivo.path.split('/').last,
         ),
@@ -120,16 +126,15 @@ class DenunciasRepository {
     try {
       return await attempt();
     } on _RetryMultipartException {
-      // refrescó token, reintenta una vez
       return await attempt();
     }
   }
 
   // =========================
-  // SUBIR FIRMA (PNG)
+  // SUBIR FIRMA (BIN en BD)
   // POST /api/denuncias/borradores/<id>/firma/
   // form-data:
-  //   - archivo: file (firma.png)
+  //   - firma: bytes/file ✅ (clave exacta)
   // =========================
   Future<Map<String, dynamic>> subirFirmaBorrador({
     required String borradorId,
@@ -139,7 +144,7 @@ class DenunciasRepository {
       final token = await _accessToken();
 
       final uri = Uri.parse(
-        "$baseUrl/api/denuncias/borradores/$borradorId/firma/",
+        "${baseUrl}api/denuncias/borradores/$borradorId/firma/",
       );
 
       final req = http.MultipartRequest("POST", uri);
@@ -147,7 +152,7 @@ class DenunciasRepository {
 
       req.files.add(
         http.MultipartFile.fromBytes(
-          "firma", // ESTA ES LA CLAVE QUE ESPERA EL BACKEND
+          "firma", // ✅ backend espera "firma"
           pngBytes,
           filename: "firma.png",
           contentType: http_parser.MediaType("image", "png"),
@@ -183,7 +188,6 @@ class DenunciasRepository {
     throw Exception("Formato inesperado en /api/denuncias/mias/");
   }
 
-  // GET raw
   Future<List<Map<String, dynamic>>> getMiasRaw() async {
     final res = await api.get("api/denuncias/mias/");
     if (res is List) return res.cast<Map<String, dynamic>>();
@@ -292,7 +296,7 @@ class DenunciasRepository {
     throw Exception("Formato inesperado en finalizar borrador");
   }
 
-  //----------mapa------------
+  // ---------- mapa ----------
   Future<Map<String, dynamic>> getMapa({
     double? lat,
     double? lng,
@@ -325,7 +329,7 @@ class DenunciasRepository {
     throw Exception("Formato inesperado en /api/denuncias/mapa/");
   }
 
-  //----------descargas
+  // ---------- detalle ----------
   Future<Map<String, dynamic>> getDetalleDenuncia(String denunciaId) async {
     final res = await api.get("api/denuncias/$denunciaId/detalle/");
     if (res is Map) return Map<String, dynamic>.from(res);
@@ -334,14 +338,8 @@ class DenunciasRepository {
 
   // GET /api/denuncias/<id>/respuestas/
   Future<Map<String, dynamic>> getRespuestasDenuncia(String denunciaId) async {
-    final res = await api.get(
-      //"api/denuncias/denuncias/$denunciaId/respuestas/",
-      "api/denuncias/$denunciaId/respuestas/",
-    );
-
-    // Si tu backend devuelve {"success":true,"respuestas":[...]}
+    final res = await api.get("api/denuncias/$denunciaId/respuestas/");
     if (res is Map) return Map<String, dynamic>.from(res);
-
     throw Exception("Formato inesperado en respuestas denuncia");
   }
 }

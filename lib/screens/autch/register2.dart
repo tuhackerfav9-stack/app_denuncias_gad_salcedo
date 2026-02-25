@@ -19,7 +19,7 @@ class _Register2State extends State<Register2> {
   final formKey = GlobalKey<FormState>();
   final correoController = TextEditingController();
 
-  // ✅ NUEVO: cooldown 30s
+  //  NUEVO: cooldown 30s
   Timer? _timer;
   int _cooldown = 0;
 
@@ -42,7 +42,7 @@ class _Register2State extends State<Register2> {
 
   @override
   void dispose() {
-    _timer?.cancel(); // ✅ NUEVO
+    _timer?.cancel(); //  NUEVO
     correoController.dispose();
     super.dispose();
   }
@@ -125,10 +125,10 @@ class _Register2State extends State<Register2> {
   }
 
   Future<void> verificarCorreo() async {
-    if (_bloqueado) return; // ✅ NUEVO: no deja spamear
+    if (_bloqueado) return; //  NUEVO: no deja spamear
     if (!formKey.currentState!.validate()) return;
 
-    // ✅ NUEVO: se bloquea 30s desde que toca el botón
+    //  NUEVO: se bloquea 30s desde que toca el botón
     _iniciarCooldown(30);
 
     // leer args
@@ -158,11 +158,11 @@ class _Register2State extends State<Register2> {
       if (devCodigo.isNotEmpty) {
         // opcional: mostrarlo para pruebas rápidas
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✅ Código enviado (DEV): $devCodigo')),
+          SnackBar(content: Text(' Código enviado (DEV): $devCodigo')),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Código enviado al correo')),
+          const SnackBar(content: Text(' Código enviado al correo')),
         );
       }
 

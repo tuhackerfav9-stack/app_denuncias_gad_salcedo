@@ -15,8 +15,7 @@ class DenunciaPdfBuilder {
     try {
       final dt = DateTime.tryParse(v.toString());
       if (dt == null) return v.toString();
-      final local = dt.toLocal();
-      return DateFormat("dd/MM/yyyy HH:mm").format(local);
+      return DateFormat("dd/MM/yyyy HH:mm").format(dt.toLocal());
     } catch (_) {
       return v.toString();
     }
@@ -27,25 +26,50 @@ class DenunciaPdfBuilder {
     return s.isEmpty ? fallback : s;
   }
 
-  static Future<Uint8List?> _loadNetworkImage(String? url) async {
-    if (url == null || url.trim().isEmpty) return null;
+  static String _absUrl(String raw, String? baseUrl) {
+    final u = raw.trim();
+    if (u.isEmpty) return "";
+    if (u.startsWith("http://") || u.startsWith("https://")) return u;
+
+    final b = (baseUrl ?? "").trim();
+    if (b.isEmpty) return u; // si no hay base, devolvemos igual
+
+    final base = b.endsWith("/") ? b.substring(0, b.length - 1) : b;
+    if (u.startsWith("/")) return "$base$u";
+    return "$base/$u";
+  }
+
+  static Map<String, String> _headersFrom(Map<String, dynamic> denuncia) {
+    final token = (denuncia["auth_token"] ?? denuncia["token"] ?? "")
+        .toString()
+        .trim();
+    if (token.isEmpty) return {};
+    // si tu token ya viene como "Bearer xxx", no lo dupliques:
+    final isBearer = token.toLowerCase().startsWith("bearer ");
+    return {"Authorization": isBearer ? token : "Bearer $token"};
+  }
+
+  static Future<Uint8List?> _loadNetworkBytes(
+    String? url, {
+    required Map<String, String> headers,
+  }) async {
+    if (url == null) return null;
+    final u = url.trim();
+    if (u.isEmpty) return null;
+
+    // Si quedó relativo sin host, no sirve para http.get
+    if (!u.startsWith("http://") && !u.startsWith("https://")) return null;
+
     try {
-      final uri = Uri.parse(url.trim());
-      final r = await http.get(uri);
-      if (r.statusCode >= 200 && r.statusCode < 300) {
+      final uri = Uri.parse(u);
+      final r = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 15));
+      if (r.statusCode >= 200 && r.statusCode < 300 && r.bodyBytes.isNotEmpty) {
         return r.bodyBytes;
       }
     } catch (_) {}
     return null;
-  }
-
-  static bool _isImageUrl(String url) {
-    final u = url.toLowerCase();
-    return u.endsWith(".png") ||
-        u.endsWith(".jpg") ||
-        u.endsWith(".jpeg") ||
-        u.endsWith(".webp") ||
-        u.endsWith(".gif");
   }
 
   static bool _isVideoUrl(String url) {
@@ -73,51 +97,62 @@ class DenunciaPdfBuilder {
     final apellidos = _safe(denuncia["ciudadano_apellidos"], fallback: "");
     final cedula = _safe(denuncia["ciudadano_cedula"], fallback: "");
 
-    // Firma (URL -> bytes)
-    final firmaUrl = (denuncia["firma_url"] ?? "").toString();
-    final firmaBytes = await _loadNetworkImage(firmaUrl);
+    // Base URL para /media/...
+    final baseUrl =
+        (denuncia["base_url"] ??
+                denuncia["baseUrl"] ??
+                denuncia["api_base_url"] ??
+                denuncia["apiBaseUrl"])
+            ?.toString()
+            .trim();
 
-    // Evidencias (lista)
+    final headers = _headersFrom(denuncia);
+
+    // ===== Firma =====
+    final firmaUrlRaw = (denuncia["firma_url"] ?? "").toString();
+    final firmaUrl = _absUrl(firmaUrlRaw, baseUrl);
+    final firmaBytes = await _loadNetworkBytes(firmaUrl, headers: headers);
+
+    // ===== Evidencias =====
     final evidenciasRaw = (denuncia["evidencias"] is List)
         ? (denuncia["evidencias"] as List)
         : <dynamic>[];
 
-    // Normalizar URLs de evidencias
-    final evidenciasUrls = <String>[];
-    final videosUrls = <String>[];
+    final imagenUrls = <String>[];
+    final videoUrls = <String>[];
 
     for (final e in evidenciasRaw) {
-      if (e is Map) {
-        final u = (e["url_archivo"] ?? e["url"] ?? "").toString().trim();
-        if (u.isEmpty) continue;
+      String u = "";
+      String tipoEv = "";
 
-        if (_isVideoUrl(u) ||
-            (e["tipo"]?.toString().toLowerCase().contains("video") ?? false)) {
-          videosUrls.add(u);
-        } else {
-          // si no termina en extensión, igual la intentamos como imagen
-          evidenciasUrls.add(u);
-        }
+      if (e is Map) {
+        u = (e["url_archivo"] ?? e["url"] ?? e["archivo"] ?? "")
+            .toString()
+            .trim();
+        tipoEv = (e["tipo"] ?? "").toString().toLowerCase().trim();
       } else if (e is String) {
-        final u = e.trim();
-        if (u.isEmpty) continue;
-        if (_isVideoUrl(u)) {
-          videosUrls.add(u);
-        } else {
-          evidenciasUrls.add(u);
-        }
+        u = e.trim();
+      }
+
+      if (u.isEmpty) continue;
+
+      final abs = _absUrl(u, baseUrl);
+      final isVideo = _isVideoUrl(abs) || tipoEv.contains("video");
+
+      if (isVideo) {
+        videoUrls.add(abs);
+      } else {
+        imagenUrls.add(abs);
       }
     }
 
-    // Cargar hasta 4 evidencias como imágenes (para no demorar ni pesar tanto)
-    final evidenciaImages = <Uint8List>[];
-    for (final url in evidenciasUrls) {
+    // Descargar hasta 4 imágenes
+    final evidenciaImages = <pw.MemoryImage>[];
+    for (final url in imagenUrls) {
       if (evidenciaImages.length >= 4) break;
-
-      // si tiene extensión de imagen, ok; si no, igual intentamos descargar
-      if (_isImageUrl(url) || true) {
-        final bytes = await _loadNetworkImage(url);
-        if (bytes != null) evidenciaImages.add(bytes);
+      final bytes = await _loadNetworkBytes(url, headers: headers);
+      if (bytes != null) {
+        evidenciaImages.add(pw.MemoryImage(bytes));
       }
     }
 
@@ -138,7 +173,7 @@ class DenunciaPdfBuilder {
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Container(
+              pw.SizedBox(
                 width: 70,
                 height: 70,
                 child: pw.Image(logo, fit: pw.BoxFit.contain),
@@ -247,65 +282,54 @@ class DenunciaPdfBuilder {
 
           // ========= Evidencias =========
           _sectionTitle("4. Evidencias registradas en el sistema"),
-          if (evidenciaImages.isEmpty && videosUrls.isEmpty)
+
+          // ✅ Fotos
+          if (evidenciaImages.isNotEmpty) ...[
+            pw.Text(
+              "Fotografías (máximo 4):",
+              style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 6),
+            pw.Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: evidenciaImages.map((img) {
+                return pw.Container(
+                  width: 240,
+                  height: 160,
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(width: 1, color: PdfColors.grey500),
+                    borderRadius: pw.BorderRadius.circular(6),
+                  ),
+                  padding: const pw.EdgeInsets.all(6),
+                  child: pw.Image(img, fit: pw.BoxFit.contain),
+                );
+              }).toList(),
+            ),
+            pw.SizedBox(height: 10),
+          ] else if (imagenUrls.isNotEmpty) ...[
+            // si hay urls pero no se pudieron descargar
+            pw.Text(
+              "Fotos adjuntas: ${imagenUrls.length} (no se pudieron incrustar en el PDF).",
+              style: const pw.TextStyle(fontSize: 10),
+            ),
+            pw.SizedBox(height: 6),
+          ],
+
+          // ✅ Videos: SOLO mensaje con cantidad (como pediste)
+          if (videoUrls.isNotEmpty)
+            pw.Text(
+              "Videos adjuntos: ${videoUrls.length}",
+              style: const pw.TextStyle(fontSize: 10),
+            ),
+
+          if (evidenciaImages.isEmpty &&
+              imagenUrls.isEmpty &&
+              videoUrls.isEmpty)
             pw.Text(
               "No existen evidencias registradas.",
               style: const pw.TextStyle(fontSize: 11),
-            )
-          else ...[
-            if (evidenciaImages.isNotEmpty) ...[
-              pw.Text(
-                "Fotografías (máximo 4):",
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 6),
-              pw.Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: evidenciaImages.map((bytes) {
-                  return pw.Container(
-                    width: 240,
-                    height: 160,
-                    decoration: pw.BoxDecoration(
-                      border: pw.Border.all(width: 1, color: PdfColors.grey500),
-                      borderRadius: pw.BorderRadius.circular(6),
-                    ),
-                    padding: const pw.EdgeInsets.all(6),
-                    child: pw.Image(
-                      pw.MemoryImage(bytes),
-                      fit: pw.BoxFit.contain,
-                    ),
-                  );
-                }).toList(),
-              ),
-              pw.SizedBox(height: 10),
-            ],
-            if (videosUrls.isNotEmpty) ...[
-              pw.Text(
-                "Videos (enlaces):",
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 4),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: videosUrls
-                    .take(5)
-                    .map(
-                      (u) => pw.Text(
-                        "- $u",
-                        style: const pw.TextStyle(fontSize: 9),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
-          ],
+            ),
 
           pw.SizedBox(height: 18),
 
@@ -339,7 +363,7 @@ class DenunciaPdfBuilder {
                           ),
                   ),
                   pw.SizedBox(height: 6),
-                  pw.Container(width: 200, child: pw.Divider()),
+                  pw.SizedBox(width: 200, child: pw.Divider()),
                   pw.Text(
                     _safe(
                       "$nombres $apellidos",
@@ -398,7 +422,7 @@ class DenunciaPdfBuilder {
       child: pw.Row(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Container(
+          pw.SizedBox(
             width: 120,
             child: pw.Text(
               "$k:",

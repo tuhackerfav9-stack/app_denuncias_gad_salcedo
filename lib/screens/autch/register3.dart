@@ -160,9 +160,9 @@ class _Register3State extends State<Register3> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('✅ Fecha guardada: $fechaIso')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(' Fecha guardada: $fechaIso')),
+      ); //solo pruebas
 
       Navigator.pushNamed(context, '/register4', arguments: {'uid': uid});
     } on ApiException catch (e) {
