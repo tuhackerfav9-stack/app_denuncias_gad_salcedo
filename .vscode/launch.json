@@ -6,7 +6,7 @@
       "request": "launch",
       "type": "dart",
       "toolArgs": [
-        "--dart-define=GEMINI_API_KEY=AIzaSyDuO4AF91qdrjNqK46_OKJ_NdlnFY5mViQ"
+        "--dart-define="
       ]
     }
   ]
