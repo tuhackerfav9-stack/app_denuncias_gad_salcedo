@@ -243,7 +243,7 @@ class DenunciaPdfBuilder {
 
           // ========= Intro =========
           pw.Text(
-            "Ciudad de Salcedo, a los ____ días del mes de __________ del año ____.",
+            "Ciudad de Salcedo, $fecha",
             style: const pw.TextStyle(fontSize: 11),
           ),
           pw.SizedBox(height: 10),
@@ -381,7 +381,7 @@ class DenunciaPdfBuilder {
           // ========= Nota =========
           pw.Text(
             "Nota: La evidencia adjunta (fotografías, videos u otros) corresponde a la registrada en el sistema. "
-            "El denunciante puede solicitar una copia de la denuncia presentada.",
+            "Este documento tiene valides de 24 horas, caso contario descargue de nuevo, ya que pierde valides.",
             style: const pw.TextStyle(fontSize: 9),
           ),
         ],
