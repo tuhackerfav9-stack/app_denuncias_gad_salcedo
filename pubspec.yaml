@@ -41,6 +41,8 @@ dependencies:
 
   # Ubicación en tiempo real
   geolocator: ^12.0.0
+  #hacer poligono de ubicacion
+  geocoding: ^3.0.0
 
   # Seleccionar foto o video
   image_picker: ^1.1.2
