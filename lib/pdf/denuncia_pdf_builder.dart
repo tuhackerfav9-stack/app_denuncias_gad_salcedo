@@ -27,16 +27,49 @@ class DenunciaPdfBuilder {
   }
 
   static String _absUrl(String raw, String? baseUrl) {
-    final u = raw.trim();
-    if (u.isEmpty) return "";
-    if (u.startsWith("http://") || u.startsWith("https://")) return u;
+    final s = raw.trim();
+    if (s.isEmpty) return "";
 
     final b = (baseUrl ?? "").trim();
-    if (b.isEmpty) return u; // si no hay base, devolvemos igual
+    final apiBase = b.endsWith("/") ? b.substring(0, b.length - 1) : b;
+    final rootBase = apiBase.replaceAll(RegExp(r"/web$"), "");
 
-    final base = b.endsWith("/") ? b.substring(0, b.length - 1) : b;
-    if (u.startsWith("/")) return "$base$u";
-    return "$base/$u";
+    // Si es absoluta
+    if (s.startsWith("http://") || s.startsWith("https://")) {
+      final uri = Uri.tryParse(s);
+      if (uri != null) {
+        final host = uri.host.toLowerCase();
+        final isInternal =
+            host.startsWith("192.168.") ||
+            host.startsWith("10.") ||
+            host == "localhost" ||
+            host == "127.0.0.1";
+
+        if (isInternal) {
+          final path = uri.path; // /api/... o /media/...
+          if (path.startsWith("/api/")) {
+            return "$apiBase$path"; //  cae en /web/api/...
+          }
+
+          if (path.startsWith("/media/")) {
+            return "$rootBase$path"; //  /media/ sin /web
+          }
+
+          if (path.startsWith("/web/")) return "$rootBase$path";
+          return "$rootBase$path";
+        }
+        return s;
+      }
+      return s;
+    }
+
+    // Relativas
+    if (s.startsWith("/api/")) return "$apiBase$s";
+    if (s.startsWith("/media/")) return "$rootBase$s";
+    if (s.startsWith("/web/")) return "$rootBase$s";
+    if (s.startsWith("/")) return "$rootBase$s";
+
+    return "$apiBase/$s";
   }
 
   static Map<String, String> _headersFrom(Map<String, dynamic> denuncia) {

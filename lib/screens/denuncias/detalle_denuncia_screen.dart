@@ -99,15 +99,57 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
     if (u == null) return "";
     final s = u.trim();
     if (s.isEmpty) return "";
-    if (s.startsWith("http://") || s.startsWith("https://")) return s;
 
-    // baseUrl puede venir con "/" final
-    final b = repo.baseUrl.endsWith("/")
+    // base API (tu ApiConnection.baseUrl), ej:
+    // https://www.salcedo.gob.ec/web/
+    final apiBase = repo.baseUrl.endsWith("/")
         ? repo.baseUrl.substring(0, repo.baseUrl.length - 1)
         : repo.baseUrl;
 
-    if (s.startsWith("/")) return "$b$s";
-    return "$b/$s";
+    // root sin /web al final: https://www.salcedo.gob.ec
+    final rootBase = apiBase.replaceAll(RegExp(r"/web$"), "");
+
+    // 1) Si viene absoluta con IP interna, reconstruimos con el dominio
+    if (s.startsWith("http://") || s.startsWith("https://")) {
+      final uri = Uri.tryParse(s);
+      if (uri != null) {
+        final host = (uri.host).toLowerCase();
+
+        final isInternalHost =
+            host.startsWith("192.168.") ||
+            host.startsWith("10.") ||
+            host == "localhost" ||
+            host == "127.0.0.1";
+
+        if (isInternalHost) {
+          final path = uri.path; // EJ: /api/denuncias/archivos/denuncia/<uuid>/
+          // si es /api/... va bajo apiBase (que ya incluye /web)
+          if (path.startsWith("/api/")) return "$apiBase$path";
+          // si fuera media directo:
+          if (path.startsWith("/media/")) return "$rootBase$path";
+          // si viniera /web/...:
+          if (path.startsWith("/web/")) return "$rootBase$path";
+          // fallback
+          return "$rootBase$path";
+        }
+
+        // si por algún motivo viene /web/media (mal), lo arreglamos:
+        if (s.contains("/web/media/")) {
+          return s.replaceFirst("/web/media/", "/media/");
+        }
+
+        return s; // ya es una URL pública
+      }
+      return s;
+    }
+
+    // 2) Relativas
+    if (s.startsWith("/api/")) return "$apiBase$s";
+    if (s.startsWith("/media/")) return "$rootBase$s";
+    if (s.startsWith("/web/")) return "$rootBase$s";
+
+    if (s.startsWith("/")) return "$rootBase$s";
+    return "$apiBase/$s";
   }
 
   void _snack(String msg) {
@@ -1037,9 +1079,13 @@ class _DetalleDenunciaScreenState extends State<DetalleDenunciaScreen> {
                           denuncia: data,
                         );
 
-                        await Printing.layoutPdf(
-                          onLayout: (_) async => pdfBytes,
+                        await Printing.sharePdf(
+                          bytes: pdfBytes,
+                          filename: "denuncia_$id.pdf",
                         );
+                        //await Printing.layoutPdf(
+                        //  onLayout: (_) async => pdfBytes,
+                        //);
                       } catch (e) {
                         _snack("Error PDF: $e");
                       }

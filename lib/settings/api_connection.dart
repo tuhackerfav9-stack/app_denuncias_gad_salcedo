@@ -19,6 +19,7 @@ class ApiConnection {
   //final String baseUrl = "http://192.168.100.46:8000/";
   //render https://denuncias-gad.onrender.com
   //final String baseUrl = "https://denuncias-gad.onrender.com/";
+  //ruta del gad en esa ruta esta subido el app web pero toca ver la api si apunta
   final String baseUrl = "https://www.salcedo.gob.ec/web/";
 
   // Timeouts (para que NO se quede cargando)

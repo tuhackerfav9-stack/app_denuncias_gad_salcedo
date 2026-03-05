@@ -11,7 +11,7 @@ import '../settings/session.dart';
 class DenunciasRepository {
   final api = ApiConnection();
 
-  // ✅ IMPORTANTE:
+  //  IMPORTANTE:
   // Ahora NO hardcodeamos la baseUrl aquí.
   // Usamos la misma baseUrl que ya tienes en ApiConnection para evitar errores.
   String get baseUrl => api.baseUrl; // e.g. https://denuncias-gad.onrender.com/
@@ -81,7 +81,7 @@ class DenunciasRepository {
   }
 
   // =========================
-  // ✅ HEADERS PARA URL BINARIA (Image.network / descargas)
+  //  HEADERS PARA URL BINARIA (Image.network / descargas)
   // Porque esos endpoints /archivos/... piden JWT
   // =========================
   Future<Map<String, String>> authHeaders() async {
@@ -93,7 +93,7 @@ class DenunciasRepository {
   // SUBIR EVIDENCIA (BIN en BD)
   // POST /api/denuncias/borradores/<id>/evidencias/
   // form-data:
-  //   - archivo: file  ✅ (clave exacta)
+  //   - archivo: file   (clave exacta)
   //   - tipo: foto|video|audio (opcional)
   // =========================
   Future<Map<String, dynamic>> subirEvidenciaBorrador({
@@ -134,7 +134,7 @@ class DenunciasRepository {
   // SUBIR FIRMA (BIN en BD)
   // POST /api/denuncias/borradores/<id>/firma/
   // form-data:
-  //   - firma: bytes/file ✅ (clave exacta)
+  //   - firma: bytes/file  (clave exacta)
   // =========================
   Future<Map<String, dynamic>> subirFirmaBorrador({
     required String borradorId,
@@ -152,7 +152,7 @@ class DenunciasRepository {
 
       req.files.add(
         http.MultipartFile.fromBytes(
-          "firma", // ✅ backend espera "firma"
+          "firma", //  backend espera "firma"
           pngBytes,
           filename: "firma.png",
           contentType: http_parser.MediaType("image", "png"),

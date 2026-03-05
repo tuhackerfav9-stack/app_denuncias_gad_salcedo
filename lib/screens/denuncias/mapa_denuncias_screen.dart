@@ -26,7 +26,7 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
   String filtro = 'todos';
 
   // centro Salcedo
-  static const LatLng initialCenter = LatLng(-0.9333, -78.6167);
+  static const LatLng initialCenter = LatLng(-1.0450, -78.5900);
 
   // Controller seguro
   final Completer<GoogleMapController> _mapCompleter =
@@ -94,7 +94,7 @@ class _MapaDenunciasScreenState extends State<MapaDenunciasScreen> {
     await _loadFromApi();
   }
 
-  // ✅ IDs quemados (según tu tabla real)
+  //  IDs quemados (según tu tabla real)
   int? _tipoIdFromFiltro(String f) {
     switch (f) {
       case "luz": // Alumbrado público (id 1)
