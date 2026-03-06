@@ -3,7 +3,8 @@ import '../settings/geo_gate.dart';
 import 'out_of_area_screen.dart';
 
 class GeoProtectedScreen extends StatefulWidget {
-  final WidgetBuilder builder; // pantalla destino si pasa
+  final WidgetBuilder builder;
+
   const GeoProtectedScreen({super.key, required this.builder});
 
   @override
@@ -12,6 +13,7 @@ class GeoProtectedScreen extends StatefulWidget {
 
 class _GeoProtectedScreenState extends State<GeoProtectedScreen> {
   bool loading = true;
+  bool allowed = false;
   String? errorMsg;
 
   @override
@@ -23,6 +25,7 @@ class _GeoProtectedScreenState extends State<GeoProtectedScreen> {
   Future<void> _run() async {
     setState(() {
       loading = true;
+      allowed = false;
       errorMsg = null;
     });
 
@@ -30,16 +33,11 @@ class _GeoProtectedScreenState extends State<GeoProtectedScreen> {
 
     if (!mounted) return;
 
-    if (res.allowed) {
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: widget.builder));
-    } else {
-      setState(() {
-        loading = false;
-        errorMsg = res.message;
-      });
-    }
+    setState(() {
+      loading = false;
+      allowed = res.allowed;
+      errorMsg = res.message;
+    });
   }
 
   @override
@@ -49,6 +47,14 @@ class _GeoProtectedScreenState extends State<GeoProtectedScreen> {
         backgroundColor: Colors.white,
         body: Center(child: CircularProgressIndicator()),
       );
+    }
+
+    if (allowed) {
+      // IMPORTANTE:
+      // No navegamos a otra ruta.
+      // Renderizamos la pantalla destino dentro de la MISMA ruta,
+      // así se conservan los arguments del Navigator.pushNamed(...)
+      return Builder(builder: widget.builder);
     }
 
     return OutOfAreaScreen(

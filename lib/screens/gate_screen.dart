@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../settings/geo_gate.dart';
 import 'out_of_area_screen.dart';
-
-// tu form real
 import 'denuncias/denuncias_from_screen.dart';
 
 class DenunciaGateScreen extends StatefulWidget {
@@ -14,6 +12,7 @@ class DenunciaGateScreen extends StatefulWidget {
 
 class _DenunciaGateScreenState extends State<DenunciaGateScreen> {
   bool loading = true;
+  bool allowed = false;
   String? errorMsg;
 
   @override
@@ -25,6 +24,7 @@ class _DenunciaGateScreenState extends State<DenunciaGateScreen> {
   Future<void> _run() async {
     setState(() {
       loading = true;
+      allowed = false;
       errorMsg = null;
     });
 
@@ -32,16 +32,11 @@ class _DenunciaGateScreenState extends State<DenunciaGateScreen> {
 
     if (!mounted) return;
 
-    if (res.allowed) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const DenunciasFormScreen()),
-      );
-    } else {
-      setState(() {
-        loading = false;
-        errorMsg = res.message;
-      });
-    }
+    setState(() {
+      loading = false;
+      allowed = res.allowed;
+      errorMsg = res.message;
+    });
   }
 
   @override
@@ -51,6 +46,10 @@ class _DenunciaGateScreenState extends State<DenunciaGateScreen> {
         backgroundColor: Colors.white,
         body: Center(child: CircularProgressIndicator()),
       );
+    }
+
+    if (allowed) {
+      return const DenunciasFormScreen();
     }
 
     return OutOfAreaScreen(

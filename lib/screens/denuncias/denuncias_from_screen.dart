@@ -13,6 +13,64 @@ import '../../repositories/denuncias_repository.dart';
 //  Manejo global de errores
 import '../../settings/api_exception.dart';
 
+import 'dart:typed_data';
+import 'package:http/http.dart' as http;
+
+import 'video_viewer_screen.dart';
+
+class ProtectedImage extends StatelessWidget {
+  final String url;
+  final Future<Map<String, String>> Function() headers;
+  final BoxFit fit;
+
+  const ProtectedImage({
+    super.key,
+    required this.url,
+    required this.headers,
+    this.fit = BoxFit.contain,
+  });
+
+  Future<Uint8List> _load() async {
+    final h = await headers();
+
+    //print("IMG URL: $url");
+    debugPrint("IMG URL: $url");
+
+    final resp = await http.get(Uri.parse(url), headers: h);
+
+    //print("STATUS: ${resp.statusCode}");
+    debugPrint("STATUS: ${resp.statusCode}");
+
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception("HTTP ${resp.statusCode}");
+    }
+
+    return resp.bodyBytes;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List>(
+      future: _load(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 120,
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snap.hasError || snap.data == null) {
+          return const SizedBox(
+            height: 120,
+            child: Center(child: Text("No se pudo cargar la imagen.")),
+          );
+        }
+        return Image.memory(snap.data!, fit: fit);
+      },
+    );
+  }
+}
+
 class DenunciasFormScreen extends StatefulWidget {
   const DenunciasFormScreen({super.key});
 
@@ -71,6 +129,63 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     'Violencia intrafamiliar',
     'Otro',
   ];
+
+  //String _baseOrigin() {
+  //  // baseUrl ejemplo: https://denuncias-gad.onrender.com/
+  //  final b = repo.baseUrl;
+  //  final u = Uri.parse(b.endsWith("/") ? b : "$b/");
+  //  return "${u.scheme}://${u.host}${u.hasPort ? ":${u.port}" : ""}";
+  //}
+
+  String _absUrl(String? u) {
+    if (u == null) return "";
+    final s = u.trim();
+    if (s.isEmpty) return "";
+
+    final apiBase = repo.baseUrl.endsWith("/")
+        ? repo.baseUrl.substring(0, repo.baseUrl.length - 1)
+        : repo.baseUrl;
+
+    final rootBase = apiBase.replaceAll(RegExp(r"/web$"), "");
+
+    if (s.startsWith("http://") || s.startsWith("https://")) {
+      final uri = Uri.tryParse(s);
+
+      if (uri != null) {
+        final host = uri.host.toLowerCase();
+
+        final isInternal =
+            host.startsWith("192.168.") ||
+            host.startsWith("10.") ||
+            host == "localhost" ||
+            host == "127.0.0.1";
+
+        if (isInternal) {
+          final path = uri.path;
+
+          if (path.startsWith("/api/")) return "$apiBase$path";
+          if (path.startsWith("/media/")) return "$rootBase$path";
+          if (path.startsWith("/web/")) return "$rootBase$path";
+
+          return "$rootBase$path";
+        }
+
+        if (s.contains("/web/media/")) {
+          return s.replaceFirst("/web/media/", "/media/");
+        }
+
+        return s;
+      }
+    }
+
+    if (s.startsWith("/api/")) return "$apiBase$s";
+    if (s.startsWith("/media/")) return "$rootBase$s";
+    if (s.startsWith("/web/")) return "$rootBase$s";
+
+    if (s.startsWith("/")) return "$rootBase$s";
+
+    return "$apiBase/$s";
+  }
 
   // para el color
   Widget _blueHeader(IconData icon) {
@@ -314,7 +429,8 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
             : null);
 
     if (firmaUrl != null && firmaUrl.trim().isNotEmpty) {
-      _firmaUrlRemota = firmaUrl.trim();
+      //_firmaUrlRemota = firmaUrl.trim();
+      _firmaUrlRemota = _absUrl(firmaUrl.trim());
       signatureController.clear();
       _firmaInteractuada = false;
     }
@@ -334,7 +450,9 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
     for (final e in list) {
       if (e is Map) {
         final tipo = (e["tipo"] ?? "").toString().toLowerCase().trim();
-        final url = (e["url_archivo"] ?? e["url"] ?? "").toString().trim();
+
+        final urlRaw = (e["url_archivo"] ?? e["url"] ?? "").toString().trim();
+        final url = _absUrl(urlRaw);
         if (url.isEmpty) continue;
         _evidenciasRemotas.add({
           "tipo": tipo.isEmpty ? "archivo" : tipo,
@@ -498,45 +616,39 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
   // ✅ Ver evidencia remota (foto) con JWT
   // =========================
   void _verEvidenciaRemota(Map<String, dynamic> ev) {
-    final url = (ev["url"] ?? "").toString();
+    final url = _absUrl((ev["url"] ?? "").toString());
     final tipo = (ev["tipo"] ?? "").toString().toLowerCase();
 
     if (url.trim().isEmpty) return;
 
+    final isVideo =
+        tipo.contains("video") ||
+        url.toLowerCase().contains(".mp4") ||
+        url.toLowerCase().contains(".mov") ||
+        url.toLowerCase().contains(".mkv");
+
+    // ✅ SI ES VIDEO: abrir reproductor
+    if (isVideo) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => VideoViewerScreen(url: url)),
+      );
+      return;
+    }
+
+    // ✅ SI ES IMAGEN: tu dialog con ProtectedImage
     showDialog(
       context: context,
       builder: (_) {
         return AlertDialog(
-          title: Text(tipo.contains("video") ? "Video" : "Evidencia"),
+          title: const Text("Evidencia"),
           content: SizedBox(
             width: double.maxFinite,
-            child: tipo.contains("video")
-                ? SelectableText(
-                    "Este es un video (endpoint protegido).\n\nURL:\n$url",
-                  )
-                : FutureBuilder<Map<String, String>>(
-                    future: _jwtHeaders(),
-                    builder: (context, snap) {
-                      final headers = snap.data ?? {};
-                      if (snap.connectionState == ConnectionState.waiting) {
-                        return const SizedBox(
-                          height: 120,
-                          child: Center(child: CircularProgressIndicator()),
-                        );
-                      }
-                      return Image.network(
-                        url,
-                        headers: headers,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const SizedBox(
-                          height: 120,
-                          child: Center(
-                            child: Text("No se pudo cargar la evidencia."),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+            child: ProtectedImage(
+              url: url,
+              headers: _jwtHeaders,
+              fit: BoxFit.contain,
+            ),
           ),
           actions: [
             TextButton(
@@ -1105,17 +1217,14 @@ class _DenunciasFormScreenState extends State<DenunciasFormScreen> {
                   child: FutureBuilder<Map<String, String>>(
                     future: _jwtHeaders(),
                     builder: (context, snap) {
-                      final headers = snap.data ?? {};
+                      //final headers = snap.data ?? {};
                       if (snap.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
                       }
-                      return Image.network(
-                        _firmaUrlRemota!,
-                        headers: headers, // ✅ JWT para BIN
+                      return ProtectedImage(
+                        url: _firmaUrlRemota!,
+                        headers: _jwtHeaders,
                         fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Center(
-                          child: Text("No se pudo cargar la firma guardada."),
-                        ),
                       );
                     },
                   ),

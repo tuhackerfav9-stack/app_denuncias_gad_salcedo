@@ -4,6 +4,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'firebase_options.dart';
 import 'screens/denuncias/denuncias_from_screen.dart';
+import 'screens/geo_protected_screen.dart';
 import 'settings/push_service.dart';
 import 'settings/session_guard.dart';
 
@@ -18,16 +19,10 @@ import 'screens/autch/register5.dart';
 import 'screens/autch/verificar_codigo.dart';
 import 'screens/ayuda/ayuda_screen.dart';
 import 'screens/chatbot/chatbot_screen.dart';
-//import 'screens/denuncias/denuncias_from_screen.dart'; //original
 import 'screens/denuncias/denuncias_screen.dart';
 import 'screens/denuncias/detalle_denuncia_screen.dart';
 import 'screens/denuncias/mapa_denuncias_screen.dart';
 import 'screens/perfil/ciudadano_perfil_screen.dart';
-
-//test geo formulario
-//import 'screens/gate_screen.dart';
-//test geo general
-import 'screens/geo_protected_screen.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -70,24 +65,18 @@ class MyApp extends StatelessWidget {
         //ruta original
         //'/form/denuncias': (context) =>
         //    SessionGuard(child: const DenunciasFormScreen()),
-        //ruta prueba formualrio solo denuncia--------------
-        //'/form/denuncias': (context) =>
-        //    SessionGuard(child: const DenunciaGateScreen()),
-        //--------ruta test general-------------------------
+        //ruta bloqueada por geolocalización
         '/form/denuncias': (context) => SessionGuard(
           child: GeoProtectedScreen(
             builder: (_) => const DenunciasFormScreen(),
           ),
         ),
-        //------------------------------------
-
         //ruta original
         //'/chatbot': (context) => SessionGuard(child: const ChatbotScreen()),
-        //ruta test general
+        //ruta bloqueada por geolocalización
         '/chatbot': (context) => SessionGuard(
           child: GeoProtectedScreen(builder: (_) => const ChatbotScreen()),
         ),
-
         '/mapadenuncias': (context) =>
             SessionGuard(child: const MapaDenunciasScreen()),
         '/perfil': (context) =>

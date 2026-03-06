@@ -114,7 +114,7 @@ class DenunciasRepository {
 
       req.files.add(
         await http.MultipartFile.fromPath(
-          "archivo", // ✅ backend espera "archivo"
+          "archivo", //  backend espera "archivo"
           archivo.path,
           filename: archivo.path.split('/').last,
         ),
